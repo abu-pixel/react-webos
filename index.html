@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>React WebOS - Super Extreme</title>
+    <style>
+      /* Reset + theme */
+      html,body,#root{height:100%; margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
+      :root{--bg:#071124;--panel:#0f1724;--accent:#6ee7b7;--text:#e6eef8}
+      body{background:var(--bg); color:var(--text); overflow:hidden}
+
+      /* Desktop */
+      .desktop{position:relative; width:100%; height:100%; background-size:cover; background-position:center; transition:background 220ms}
+      .drop-hint{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); padding:12px 18px; background:rgba(255,255,255,0.03); border-radius:10px; display:none}
+      .desktop.drop-active .drop-hint{display:block}
+
+      /* Dock / Taskbar */
+      .dock{position:absolute; left:12px; right:12px; bottom:12px; height:56px; display:flex; align-items:center; padding:8px; gap:8px; backdrop-filter: blur(6px); background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px}
+      .task{background:rgba(255,255,255,0.03); padding:8px 12px; border-radius:10px; display:flex; align-items:center; gap:8px; cursor:pointer}
+
+      /* Window */
+      .window{position:absolute; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.05); box-shadow:0 18px 50px rgba(0,0,0,0.6); border-radius:10px; overflow:hidden; display:flex; flex-direction:column; transform:scale(.98); opacity:0; transition:transform 220ms ease, opacity 220ms ease}
+      .window.open{transform:scale(1); opacity:1}
+      .titlebar{display:flex; align-items:center; gap:8px; padding:6px 10px; cursor:grab; background:linear-gradient(180deg, rgba(0,0,0,0.12), transparent)}
+      .title{flex:1; font-size:13px}
+      .controls{display:flex; gap:6px}
+      .btn{width:12px; height:12px; border-radius:50%; display:inline-block}
+      .btn.red{background:#ff5f57}
+      .btn.yellow{background:#ffbd2e}
+      .btn.green{background:#28c840}
+      .content{flex:1; padding:10px; overflow:auto}
+      .panel{background:rgba(255,255,255,0.02); padding:8px; border-radius:8px}
+
+      .file{padding:8px; border-radius:6px; display:flex; justify-content:space-between; align-items:center}
+      .file:hover{background:rgba(255,255,255,0.02)}
+      .toolbar{display:flex; gap:8px; margin-bottom:8px}
+      .btn-small{padding:8px 10px; border-radius:8px; background:rgba(255,255,255,0.02); cursor:pointer}
+      input,textarea,select{background:transparent; color:var(--text); border:1px solid rgba(255,255,255,0.04); padding:6px; border-radius:6px}
+      textarea{min-height:120px}
+
+      /* Terminal */
+      .terminal{background:#000; color:#0f0; font-family:monospace; padding:8px; min-height:180px; border-radius:6px}
+
+      /* Notifications */
+      .notif{position:fixed; right:12px; top:12px; background:rgba(0,0,0,0.6); padding:10px 12px; border-radius:8px; margin-top:8px}
+
+      /* Resizer */
+      .resizer{position:absolute; width:14px; height:14px; right:6px; bottom:6px; cursor:nwse-resize}
+
+      /* responsive small */
+      @media (max-width:600px){ .dock{height:68px} .window{width:calc(100% - 40px) !important; left:20px !important} }
+
+      /* thumbnails */
+      .thumb{width:48px; height:48px; object-fit:cover; border-radius:6px; border:1px solid rgba(255,255,255,0.04)}
+
+      /* subtle hover for buttons */
+      .btn-small:hover{transform:translateY(-2px); transition:transform 140ms}
+
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <!-- React + Babel -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+    const {useState, useEffect, useRef, useCallback, createContext, useContext} = React;
+    const STORAGE_KEY = 'react-webos-super-v1';
+
+    /* ----- Utilities ----- */
+    const uid = (p='id')=> p+Math.random().toString(36).slice(2,9);
+    function readFileAsDataURL(file){ return new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(file); }) }
+    function readFileAsText(file){ return new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsText(file); }) }
+
+    /* ----- Persistence ----- */
+    function loadState(){ try{ const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : null }catch(e){return null} }
+    function saveState(s){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(s)) }catch(e){console.warn('save fail',e)} }
+
+    /* ----- Context ----- */
+    const OSContext = createContext(null);
+    function OSProvider({children}){
+      const [state, setState] = useState(()=> loadState() || {
+        settings:{theme:'dark', wallpaper:null},
+        files:[ {id:uid('f'), name:'welcome.txt', type:'text', content:'Welcome to React WebOS Super Extreme!\\nUse Ctrl+N to create file, Ctrl+K to search, Ctrl+S to save in editor.'}],
+        windows:[], notifications:[]
+      });
+      useEffect(()=> saveState(state), [state]);
+
+      const api = {
+        state,
+        openWindow:(w)=> setState(s=>({...s, windows:[...s.windows, {...w, id: w.id || uid('w'), z:Date.now(), anim:true}]})),
+        updateWindow:(id, patch)=> setState(s=>({...s, windows:s.windows.map(w=> w.id===id?{...w,...patch}:w)})),
+        closeWindow:(id)=> setState(s=>({...s, windows:s.windows.filter(w=> w.id!==id)})),
+        pushNotif:(n, ttl=3500)=>{ const note={...n, id:uid('n'), ts:Date.now()}; setState(s=>({...s, notifications:[...s.notifications, note]})); if(ttl) setTimeout(()=> setState(s=>({...s, notifications:s.notifications.filter(x=> x.id!==note.id)})), ttl) },
+        removeNotif:(id)=> setState(s=>({...s, notifications:s.notifications.filter(x=> x.id!==id)})),
+        createFile:(f)=> setState(s=>({...s, files:[...s.files, f]})),
+        updateFile:(id, patch)=> setState(s=>({...s, files:s.files.map(f=> f.id===id?{...f,...patch}:f)})),
+        deleteFile:(id)=> setState(s=>({...s, files:s.files.filter(f=> f.id!==id)})),
+        setSettings:(patch)=> setState(s=>({...s, settings:{...s.settings,...patch}}))
+      };
+      return <OSContext.Provider value={api}>{children}</OSContext.Provider>
+    }
+    function useOS(){ return useContext(OSContext) }
+
+    /* ----- Window component with drag + resize + animation ----- */
+    function Window({id,title,children,width=640,height=420,x=80,y=80,onClose,onMinimize,onMaximize}){
+      const {state, updateWindow} = useOS();
+      const w = state.windows.find(win=> win.id===id);
+      const ref = useRef(); const dragging = useRef(false); const offset = useRef([0,0]);
+
+      useEffect(()=>{
+        function up(){ dragging.current=false; document.body.style.userSelect='auto' }
+        function move(e){ if(!dragging.current) return; const nx = e.clientX - offset.current[0]; const ny = e.clientY - offset.current[1]; updateWindow(id, {x:nx, y:ny}) }
+        window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+        return ()=>{ window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
+      },[])
+
+      function onTitleMouseDown(e){ dragging.current=true; document.body.style.userSelect='none'; const rect = ref.current.getBoundingClientRect(); offset.current = [e.clientX - rect.left, e.clientY - rect.top] }
+
+      function onResizerDown(e){ e.stopPropagation(); const startX=e.clientX, startY=e.clientY, startW=w.width, startH=w.height; function move(e){ const nw = Math.max(300, startW + (e.clientX - startX)); const nh = Math.max(180, startH + (e.clientY - startY)); updateWindow(id, {width:nw, height:nh}); } function up(){ window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); } window.addEventListener('mousemove', move); window.addEventListener('mouseup', up); }
+
+      if(!w) return null;
+      return (
+        <div ref={ref} className={"window "+(w.anim? 'open':'')} style={{left:w.x, top:w.y, width:w.width||width, height:w.height||height, zIndex:w.z}} onMouseDown={()=> updateWindow(id, {z: Date.now()})}>
+          <div className="titlebar" onMouseDown={onTitleMouseDown}>
+            <div style={{display:'flex', gap:8, alignItems:'center'}}>
+              <span className="btn red" onClick={()=> onClose && onClose(id)}></span>
+              <span className="btn yellow" onClick={()=> onMinimize && onMinimize(id)}></span>
+              <span className="btn green" onClick={()=> onMaximize && onMaximize(id)}></span>
+            </div>
+            <div className="title">{title}</div>
+            <div className="controls"></div>
+          </div>
+          <div className="content">{children}</div>
+          <div className="resizer" onMouseDown={onResizerDown}></div>
+        </div>
+      )
+    }
+
+    /* ----- Apps ----- */
+    function AppLauncher(){
+      const apps = [ {id:'text', name:'Text Editor', icon:'✎'}, {id:'paint', name:'Paint', icon:'🖌'}, {id:'term', name:'Terminal', icon:'❯'}, {id:'files', name:'Files', icon:'📁'} ];
+      const {openWindow, pushNotif} = useOS();
+      function open(app){ const win = { id:uid('w'), app:app.id, title:app.name, x:120, y:120, width:720, height:480}; openWindow(win); pushNotif({title:app.name+' opened', body:'Launched'}) }
+      return <div style={{display:'flex', gap:8}}>{apps.map(a=> <div key={a.id} className="btn-small" onClick={()=> open(a)}>{a.icon} {a.name}</div>)}</div>
+    }
+
+    function FilesApp({winId}){
+      const {state, createFile, updateFile, deleteFile, openWindow} = useOS();
+      const [newName,setNewName]=useState('untitled.txt');
+      const [query,setQuery]=useState('');
+
+      function openFile(f){ const win = { id:uid('w'), app:'viewer', title:f.name, x:160, y:140, width:740, height:480, fileId:f.id }; openWindow(win); }
+
+      function downloadFile(f){ if(f.type==='text'){ const blob=new Blob([f.content], {type:'text/plain'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=f.name; a.click(); URL.revokeObjectURL(url); } else { const a=document.createElement('a'); a.href=f.content; a.download=f.name; a.click(); } }
+
+      function importLocal(){ document.getElementById('hidden-file-input').click(); }
+
+      const results = state.files.filter(f=> (f.name.toLowerCase().includes(query.toLowerCase()) || (f.content||'').toString().toLowerCase().includes(query.toLowerCase())));
+
+      return (
+        <div style={{display:'flex', gap:12}}>
+          <div style={{width:320}} className="panel">
+            <div style={{display:'flex', gap:8, marginBottom:8}}>
+              <input value={newName} onChange={e=> setNewName(e.target.value)} />
+              <button className="btn-small" onClick={()=>{ const f={id:uid('f'), name:newName, type:'text', content:''}; createFile(f); setNewName('untitled.txt') }}>Create</button>
+            </div>
+            <div style={{display:'flex', gap:8, marginBottom:8}}>
+              <input placeholder="Search files & contents" value={query} onChange={e=> setQuery(e.target.value)} />
+              <div className="btn-small" onClick={importLocal}>Import</div>
+              <div className="btn-small" onClick={()=>{ const f={id:uid('f'), name:'export-list.txt', type:'text', content: state.files.map(x=> x.name).join('\n')}; createFile(f) }}>Export list</div>
+            </div>
+            <div style={{display:'flex', flexDirection:'column', gap:6}}>
+              {results.map(f=> (
+                <div key={f.id} className="file">
+                  <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                    {f.type==='image' ? <img className="thumb" src={f.content} alt="thumb" /> : <div style={{width:48}}>{f.type}</div>}
+                    <div style={{cursor:'pointer'}} onDoubleClick={()=> openFile(f)}>{f.name}</div>
+                  </div>
+                  <div style={{display:'flex', gap:8}}>
+                    <button className="btn-small" onClick={()=> openFile(f)}>Open</button>
+                    <button className="btn-small" onClick={()=> downloadFile(f)}>Download</button>
+                    <button className="btn-small" onClick={()=> { const name=prompt('Rename', f.name); if(name) updateFile(f.id,{name}) }}>Rename</button>
+                    <button className="btn-small" onClick={()=> { if(confirm('Delete?')) deleteFile(f.id) }}>Del</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{flex:1}} className="panel">
+            <div style={{marginBottom:8}}>Preview area: double click to open. Drag files onto desktop to import.</div>
+            <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px,1fr))', gap:8}}>
+              {state.files.map(f=> (
+                <div key={f.id} style={{padding:8, borderRadius:8, background:'rgba(255,255,255,0.01)'}}>
+                  <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                    {f.type==='image' ? <img src={f.content} className="thumb" /> : <div style={{width:48}}>{f.type}</div>}
+                    <div style={{flex:1}}>{f.name}</div>
+                    <div style={{display:'flex', gap:6}}>
+                      <button className="btn-small" onClick={()=> openFile(f)}>Open</button>
+                      <button className="btn-small" onClick={()=> downloadFile(f)}>DL</button>
+                    </div>
+                  </div>
+                  <div style={{marginTop:8, fontSize:12, opacity:0.7}}>{f.type}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    function TextEditor({win}){
+      const {state, updateFile, pushNotif} = useOS();
+      const file = state.files.find(f=> f.id===win.fileId) || {id:null, name:win.title, content:''};
+      const [content, setContent] = useState(file.content||'');
+      useEffect(()=> setContent(file.content||''), [file && file.id]);
+
+      function save(){ if(file.id) updateFile(file.id, {content}); pushNotif({title:'Saved', body:file.name}) }
+
+      // keyboard friendly: Ctrl+S handled globally
+      useEffect(()=>{
+        function onKey(e){ if((e.ctrlKey||e.metaKey) && e.key==='s'){ e.preventDefault(); save(); } }
+        window.addEventListener('keydown', onKey); return ()=> window.removeEventListener('keydown', onKey);
+      },[content]);
+
+      return (
+        <div style={{display:'flex', flexDirection:'column', height:'100%'}}>
+          <div className="toolbar">
+            <div className="btn-small" onClick={save}>Save (Ctrl+S)</div>
+            <div style={{marginLeft:'auto'}} className="btn-small">{file.name}</div>
+          </div>
+          <textarea style={{flex:1, width:'100%'}} value={content} onChange={e=> setContent(e.target.value)} />
+        </div>
+      )
+    }
+
+    function PaintApp({win}){
+      const canvasRef = useRef(); const {createFile, pushNotif} = useOS(); const drawing = useRef(false);
+      useEffect(()=>{ const c=canvasRef.current; if(!c) return; c.width=c.clientWidth; c.height=c.clientHeight; const ctx=c.getContext('2d'); ctx.fillStyle='white'; ctx.fillRect(0,0,c.width,c.height); },[])
+      function start(e){ drawing.current=true; draw(e) }
+      function stop(){ drawing.current=false }
+      function draw(e){ if(!drawing.current) return; const c=canvasRef.current; const rect=c.getBoundingClientRect(); const x=e.clientX-rect.left; const y=e.clientY-rect.top; const ctx=c.getContext('2d'); ctx.fillStyle='black'; ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fill(); }
+      function save(){ const c=canvasRef.current; const data=c.toDataURL('image/png'); const f={id:uid('f'), name:'drawing-'+Date.now()+'.png', type:'image', content:data}; createFile(f); pushNotif({title:'Saved drawing', body:f.name}); }
+      return (
+        <div style={{display:'flex', flexDirection:'column', height:'100%'}}>
+          <div className="toolbar"><div className="btn-small" onClick={save}>Save to Files</div></div>
+          <div style={{flex:1}}><canvas ref={canvasRef} style={{width:'100%', height:'100%', borderRadius:8}} onMouseDown={start} onMouseMove={draw} onMouseUp={stop} onMouseLeave={stop}></canvas></div>
+        </div>
+      )
+    }
+
+    function Viewer({win}){
+      const {state} = useOS(); const file = state.files.find(f=> f.id===win.fileId) || null;
+      if(!file) return <div>No file</div>;
+      if(file.type==='text') return <div style={{whiteSpace:'pre-wrap'}}>{file.content}</div>;
+      if(file.type==='image') return <img src={file.content} style={{maxWidth:'100%', maxHeight:'100%'}} />;
+      if(file.type==='audio') return <audio controls src={file.content} />;
+      if(file.type==='video') return <video controls src={file.content} style={{maxWidth:'100%'}} />;
+      return <div>Unknown file type</div>;
+    }
+
+    function Terminal({win}){
+      const {state, createFile, pushNotif, updateFile, deleteFile} = useOS(); const [lines,setLines]=useState(['Fake terminal. `help` for commands.']); const inputRef=useRef();
+      function append(t){ setLines(l=> [...l, t]); }
+      function run(raw){ const parts=raw.split(' ').filter(Boolean); const cmd=parts[0]; if(!cmd) return; if(cmd==='help'){ append('commands: ls, cat <name>, touch <name>, rm <name>, import-list, save <name> <text>') }
+      else if(cmd==='ls'){ append(state.files.map(f=> f.name).join('\n')||'(no files)') }
+      else if(cmd==='cat'){ const name=parts[1]; const f=state.files.find(x=> x.name===name); append(f?f.content:'not found') }
+      else if(cmd==='touch'){ const name=parts[1]||('file-'+Date.now()+'.txt'); createFile({id:uid('f'), name, type:'text', content:''}); append('created '+name) }
+      else if(cmd==='rm'){ const name=parts[1]; const f=state.files.find(x=> x.name===name); if(f){ deleteFile(f.id); append('deleted '+name) } else append('not found') }
+      else if(cmd==='import-list'){ append(state.files.map(f=> f.name).join('\n')) }
+      else if(cmd==='save'){ const name=parts[1]; const text = parts.slice(2).join(' '); const f = state.files.find(x=> x.name===name); if(f){ updateFile(f.id, {content:text}); append('saved'); } else { createFile({id:uid('f'), name, type:'text', content:text}); append('created and saved '+name) } }
+      else append('unknown: '+cmd);
+      }
+      return (
+        <div style={{display:'flex', flexDirection:'column', height:'100%'}}>
+          <div className="terminal" style={{flex:1}}>{lines.map((ln,i)=> <div key={i}>{ln}</div>)}</div>
+          <div style={{display:'flex', gap:8}}>
+            <input ref={inputRef} onKeyDown={e=>{ if(e.key==='Enter'){ run(e.target.value); e.target.value=''; } }} placeholder="command" />
+            <div className="btn-small" onClick={()=> { const v=inputRef.current.value; run(v); inputRef.current.value=''; }}>Run</div>
+          </div>
+        </div>
+      )
+    }
+
+    /* ----- Shell ----- */
+    function WindowShell(){
+      const {state, closeWindow, updateWindow} = useOS();
+      function renderApp(w){ if(w.app==='files') return <FilesApp winId={w.id} />; if(w.app==='text') return <TextEditor win={w} />; if(w.app==='paint') return <PaintApp win={w} />; if(w.app==='term') return <Terminal win={w} />; if(w.app==='viewer') return <Viewer win={w} />; if(w.app==='settings') return <SettingsApp win={w} />; return <div>Unknown app</div> }
+      return <>{state.windows.map(w=> (
+        <Window key={w.id} id={w.id} title={w.title} width={w.width} height={w.height} x={w.x} y={w.y} onClose={(id)=> closeWindow(id)} onMinimize={(id)=> updateWindow(id,{minimized:true})} onMaximize={(id)=> updateWindow(id,{width:window.innerWidth-80, height:window.innerHeight-160, x:40, y:40})}>{ renderApp(w) }</Window>
+      ))}</>
+    }
+
+    /* ----- Desktop UI ----- */
+    function Desktop(){
+      const {state, openWindow, setSettings, pushNotif, createFile} = useOS();
+      const [dropActive,setDropActive]=useState(false);
+
+      useEffect(()=>{ function onDrop(e){ e.preventDefault(); setDropActive(false); const files = Array.from(e.dataTransfer.files||[]); files.forEach(async file=>{ if(file.type.startsWith('image/')){ const data=await readFileAsDataURL(file); createFile({id:uid('f'), name:file.name, type:'image', content:data}); pushNotif({title:'Imported', body:file.name}); } else if(file.type.startsWith('audio/')){ const data=await readFileAsDataURL(file); createFile({id:uid('f'), name:file.name, type:'audio', content:data}); pushNotif({title:'Imported audio', body:file.name}); } else if(file.type.startsWith('video/')){ const data=await readFileAsDataURL(file); createFile({id:uid('f'), name:file.name, type:'video', content:data}); pushNotif({title:'Imported video', body:file.name}); } else { const text=await readFileAsText(file); createFile({id:uid('f'), name:file.name, type:'text', content:text}); pushNotif({title:'Imported text', body:file.name}); } }) }
+        function onDragOver(e){ e.preventDefault(); setDropActive(true); }
+        function onDragLeave(e){ setDropActive(false); }
+        window.addEventListener('drop', onDrop); window.addEventListener('dragover', onDragOver); window.addEventListener('dragleave', onDragLeave);
+        return ()=>{ window.removeEventListener('drop', onDrop); window.removeEventListener('dragover', onDragOver); window.removeEventListener('dragleave', onDragLeave); }
+      },[])
+
+      function openSettings(){ openWindow({ id:uid('w'), app:'settings', title:'Settings', x:80, y:80, width:420, height:360 }); }
+
+      return (
+        <div className={"desktop "+(dropActive? 'drop-active':'')} style={{background: state.settings.wallpaper ? `url(${state.settings.wallpaper}) center/cover` : 'linear-gradient(135deg,#071124 0%, #0d1726 100%)'}}>
+          <div style={{position:'absolute', left:12, top:12}}>
+            <div style={{display:'flex', gap:8, alignItems:'center'}}>
+              <div style={{fontWeight:700}}>React WebOS — Super Extreme</div>
+              <div className="btn-small" onClick={()=> openWindow({ id:uid('w'), app:'files', title:'Files', x:120, y:120, width:860, height:520 })}>Files</div>
+              <div className="btn-small" onClick={()=> openWindow({ id:uid('w'), app:'term', title:'Terminal', x:140, y:140, width:620, height:360 })}>Terminal</div>
+              <div className="btn-small" onClick={openSettings}>Settings</div>
+              <div style={{marginLeft:12}} className="search-hint">Press <b>Ctrl+K</b> to focus search</div>
+            </div>
+          </div>
+
+          <div style={{position:'absolute', left:12, top:72}}>
+            <AppLauncher />
+          </div>
+
+          <div style={{position:'absolute', right:12, top:12}} className="drop-hint">Drop files here to import</div>
+
+          <WindowShell />
+
+          <Taskbar />
+
+          <Notifications />
+
+          {/* hidden file input for import */}
+          <input id="hidden-file-input" type="file" style={{display:'none'}} onChange={async (e)=>{ const file=e.target.files[0]; if(!file) return; if(file.type.startsWith('image/')){ const data=await readFileAsDataURL(file); createFile({id:uid('f'), name:file.name, type:'image', content:data}); pushNotif({title:'Imported', body:file.name}); } else if(file.type.startsWith('audio/')){ const data=await readFileAsDataURL(file); createFile({id:uid('f'), name:file.name, type:'audio', content:data}); pushNotif({title:'Imported audio', body:file.name}); } else if(file.type.startsWith('video/')){ const data=await readFileAsDataURL(file); createFile({id:uid('f'), name:file.name, type:'video', content:data}); pushNotif({title:'Imported video', body:file.name}); } else { const text=await readFileAsText(file); createFile({id:uid('f'), name:file.name, type:'text', content:text}); pushNotif({title:'Imported text', body:file.name}); } e.target.value=''; }} />
+        </div>
+      )
+    }
+
+    function Taskbar(){ const {state, updateWindow, closeWindow} = useOS(); const apps = state.windows; return (
+      <div className="dock">
+        <div style={{display:'flex', gap:8, alignItems:'center'}}>
+          <div className="btn-small">Menu</div>
+          <div className="btn-small">Apps</div>
+        </div>
+        <div style={{flex:1}}></div>
+        <div style={{display:'flex', gap:8}}>
+          {apps.map(a=> <div key={a.id} className="task" onClick={()=> updateWindow(a.id, {z: Date.now()})}>{a.title}</div>)}
+        </div>
+      </div>
+    ) }
+
+    function Notifications(){ const {state, removeNotif} = useOS(); return (<div>{state.notifications.map(n=> (<div key={n.id} className="notif"><b>{n.title}</b><div style={{fontSize:12}}>{n.body}</div><div style={{marginTop:6}}><button className="btn-small" onClick={()=> removeNotif(n.id)}>Dismiss</button></div></div>))}</div>) }
+
+    function SettingsApp({win}){
+      const {state, setSettings, pushNotif} = useOS(); const [wall,setWall]=useState(state.settings.wallpaper||''); const [theme,setTheme]=useState(state.settings.theme||'dark'); useEffect(()=>{ setWall(state.settings.wallpaper||''); setTheme(state.settings.theme||'dark') }, [state.settings]); function save(){ setSettings({wallpaper:wall, theme}); pushNotif({title:'Settings saved'}) }
+      return (<div style={{display:'flex', flexDirection:'column', gap:8}}>
+        <div>Wallpaper URL</div>
+        <input value={wall} onChange={e=> setWall(e.target.value)} placeholder="image url or data url" />
+        <div>Theme</div>
+        <select value={theme} onChange={e=> setTheme(e.target.value)}><option value="dark">Dark</option><option value="light">Light</option></select>
+        <div style={{display:'flex', gap:8}}>
+          <div className="btn-small" onClick={save}>Save</div>
+          <div className="btn-small" onClick={()=> { setWall(''); setTheme('dark'); setSettings({wallpaper:null, theme:'dark'}) }}>Reset</div>
+        </div>
+      </div>)
+    }
+
+    /* ----- Root app + global shortcuts ----- */
+    function App(){
+      return (
+        <OSProvider>
+          <OSInner />
+        </OSProvider>
+      )
+    }
+
+    function OSInner(){
+      const {openWindow, state, closeWindow} = useOS(); const searchRef = useRef();
+      useEffect(()=>{
+        function onKey(e){
+          if((e.ctrlKey||e.metaKey) && e.key==='k'){ e.preventDefault();
+            openWindow({ id:uid('w'), app:'files', title:'Files', x:120, y:120, width:860, height:520 }); setTimeout(()=>{ const el = document.querySelector('.desktop input'); if(el) el.focus() }, 150);
+          }
+          if((e.ctrlKey||e.metaKey) && e.key==='n'){ e.preventDefault();
+            openWindow({ id:uid('w'), app:'files', title:'Files', x:120, y:120, width:860, height:520 }); setTimeout(()=>{ const el = document.querySelector('.desktop input'); if(el) el.focus() }, 150); const evt = new CustomEvent('create-untitled'); window.dispatchEvent(evt);
+          }
+          if(e.key==='Escape'){
+            if(state.windows && state.windows.length>0){
+              const top = state.windows.reduce((acc, cur)=> !acc || cur.z>acc.z ? cur : acc, null);
+              if(top) closeWindow(top.id);
+            }
+          }
+        }
+        window.addEventListener('keydown', onKey); return ()=> window.removeEventListener('keydown', onKey);
+      },[state.windows]);
+
+      return (<><Desktop /></>);
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />)
+    </script>
+  </body>
+</html>
