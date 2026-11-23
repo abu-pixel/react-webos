@@ -1,406 +1,1514 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>React WebOS - Super Extreme</title>
-    <style>
-      /* Reset + theme */
-      html,body,#root{height:100%; margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
-      :root{--bg:#071124;--panel:#0f1724;--accent:#6ee7b7;--text:#e6eef8}
-      body{background:var(--bg); color:var(--text); overflow:hidden}
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#070812" />
+  <meta name="description" content="AETHER OS — an elite browser-based desktop environment built with React." />
+  <title>AETHER OS — Desktop</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap');
 
-      /* Desktop */
-      .desktop{position:relative; width:100%; height:100%; background-size:cover; background-position:center; transition:background 220ms}
-      .drop-hint{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); padding:12px 18px; background:rgba(255,255,255,0.03); border-radius:10px; display:none}
-      .desktop.drop-active .drop-hint{display:block}
-
-      /* Dock / Taskbar */
-      .dock{position:absolute; left:12px; right:12px; bottom:12px; height:56px; display:flex; align-items:center; padding:8px; gap:8px; backdrop-filter: blur(6px); background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px}
-      .task{background:rgba(255,255,255,0.03); padding:8px 12px; border-radius:10px; display:flex; align-items:center; gap:8px; cursor:pointer}
-
-      /* Window */
-      .window{position:absolute; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.05); box-shadow:0 18px 50px rgba(0,0,0,0.6); border-radius:10px; overflow:hidden; display:flex; flex-direction:column; transform:scale(.98); opacity:0; transition:transform 220ms ease, opacity 220ms ease}
-      .window.open{transform:scale(1); opacity:1}
-      .titlebar{display:flex; align-items:center; gap:8px; padding:6px 10px; cursor:grab; background:linear-gradient(180deg, rgba(0,0,0,0.12), transparent)}
-      .title{flex:1; font-size:13px}
-      .controls{display:flex; gap:6px}
-      .btn{width:12px; height:12px; border-radius:50%; display:inline-block}
-      .btn.red{background:#ff5f57}
-      .btn.yellow{background:#ffbd2e}
-      .btn.green{background:#28c840}
-      .content{flex:1; padding:10px; overflow:auto}
-      .panel{background:rgba(255,255,255,0.02); padding:8px; border-radius:8px}
-
-      .file{padding:8px; border-radius:6px; display:flex; justify-content:space-between; align-items:center}
-      .file:hover{background:rgba(255,255,255,0.02)}
-      .toolbar{display:flex; gap:8px; margin-bottom:8px}
-      .btn-small{padding:8px 10px; border-radius:8px; background:rgba(255,255,255,0.02); cursor:pointer}
-      input,textarea,select{background:transparent; color:var(--text); border:1px solid rgba(255,255,255,0.04); padding:6px; border-radius:6px}
-      textarea{min-height:120px}
-
-      /* Terminal */
-      .terminal{background:#000; color:#0f0; font-family:monospace; padding:8px; min-height:180px; border-radius:6px}
-
-      /* Notifications */
-      .notif{position:fixed; right:12px; top:12px; background:rgba(0,0,0,0.6); padding:10px 12px; border-radius:8px; margin-top:8px}
-
-      /* Resizer */
-      .resizer{position:absolute; width:14px; height:14px; right:6px; bottom:6px; cursor:nwse-resize}
-
-      /* responsive small */
-      @media (max-width:600px){ .dock{height:68px} .window{width:calc(100% - 40px) !important; left:20px !important} }
-
-      /* thumbnails */
-      .thumb{width:48px; height:48px; object-fit:cover; border-radius:6px; border:1px solid rgba(255,255,255,0.04)}
-
-      /* subtle hover for buttons */
-      .btn-small:hover{transform:translateY(-2px); transition:transform 140ms}
-
-    </style>
-  </head>
-  <body>
-    <div id="root"></div>
-
-    <!-- React + Babel -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-    <script type="text/babel">
-    const {useState, useEffect, useRef, useCallback, createContext, useContext} = React;
-    const STORAGE_KEY = 'react-webos-super-v1';
-
-    /* ----- Utilities ----- */
-    const uid = (p='id')=> p+Math.random().toString(36).slice(2,9);
-    function readFileAsDataURL(file){ return new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(file); }) }
-    function readFileAsText(file){ return new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsText(file); }) }
-
-    /* ----- Persistence ----- */
-    function loadState(){ try{ const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : null }catch(e){return null} }
-    function saveState(s){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(s)) }catch(e){console.warn('save fail',e)} }
-
-    /* ----- Context ----- */
-    const OSContext = createContext(null);
-    function OSProvider({children}){
-      const [state, setState] = useState(()=> loadState() || {
-        settings:{theme:'dark', wallpaper:null},
-        files:[ {id:uid('f'), name:'welcome.txt', type:'text', content:'Welcome to React WebOS Super Extreme!\\nUse Ctrl+N to create file, Ctrl+K to search, Ctrl+S to save in editor.'}],
-        windows:[], notifications:[]
-      });
-      useEffect(()=> saveState(state), [state]);
-
-      const api = {
-        state,
-        openWindow:(w)=> setState(s=>({...s, windows:[...s.windows, {...w, id: w.id || uid('w'), z:Date.now(), anim:true}]})),
-        updateWindow:(id, patch)=> setState(s=>({...s, windows:s.windows.map(w=> w.id===id?{...w,...patch}:w)})),
-        closeWindow:(id)=> setState(s=>({...s, windows:s.windows.filter(w=> w.id!==id)})),
-        pushNotif:(n, ttl=3500)=>{ const note={...n, id:uid('n'), ts:Date.now()}; setState(s=>({...s, notifications:[...s.notifications, note]})); if(ttl) setTimeout(()=> setState(s=>({...s, notifications:s.notifications.filter(x=> x.id!==note.id)})), ttl) },
-        removeNotif:(id)=> setState(s=>({...s, notifications:s.notifications.filter(x=> x.id!==id)})),
-        createFile:(f)=> setState(s=>({...s, files:[...s.files, f]})),
-        updateFile:(id, patch)=> setState(s=>({...s, files:s.files.map(f=> f.id===id?{...f,...patch}:f)})),
-        deleteFile:(id)=> setState(s=>({...s, files:s.files.filter(f=> f.id!==id)})),
-        setSettings:(patch)=> setState(s=>({...s, settings:{...s.settings,...patch}}))
-      };
-      return <OSContext.Provider value={api}>{children}</OSContext.Provider>
+    :root{
+      --accent:#8b5cf6;--accent2:#22d3ee;--accent-soft:rgba(139,92,246,.16);
+      --text:#eef0ff;--muted:#9aa3c0;
+      --glass:rgba(14,16,30,.70);--glass-strong:rgba(11,13,26,.90);
+      --win-bg:linear-gradient(165deg,rgba(24,27,48,.94),rgba(12,14,27,.96));
+      --panel:rgba(255,255,255,.035);--panel-hover:rgba(255,255,255,.07);
+      --stroke:rgba(255,255,255,.09);--stroke-strong:rgba(255,255,255,.16);
+      --shadow:0 30px 80px rgba(0,0,0,.55),0 2px 10px rgba(0,0,0,.35);
+      --radius:16px;--topbar:40px;--dock-h:74px;
+      font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif;color-scheme:dark;
     }
-    function useOS(){ return useContext(OSContext) }
-
-    /* ----- Window component with drag + resize + animation ----- */
-    function Window({id,title,children,width=640,height=420,x=80,y=80,onClose,onMinimize,onMaximize}){
-      const {state, updateWindow} = useOS();
-      const w = state.windows.find(win=> win.id===id);
-      const ref = useRef(); const dragging = useRef(false); const offset = useRef([0,0]);
-
-      useEffect(()=>{
-        function up(){ dragging.current=false; document.body.style.userSelect='auto' }
-        function move(e){ if(!dragging.current) return; const nx = e.clientX - offset.current[0]; const ny = e.clientY - offset.current[1]; updateWindow(id, {x:nx, y:ny}) }
-        window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
-        return ()=>{ window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
-      },[])
-
-      function onTitleMouseDown(e){ dragging.current=true; document.body.style.userSelect='none'; const rect = ref.current.getBoundingClientRect(); offset.current = [e.clientX - rect.left, e.clientY - rect.top] }
-
-      function onResizerDown(e){ e.stopPropagation(); const startX=e.clientX, startY=e.clientY, startW=w.width, startH=w.height; function move(e){ const nw = Math.max(300, startW + (e.clientX - startX)); const nh = Math.max(180, startH + (e.clientY - startY)); updateWindow(id, {width:nw, height:nh}); } function up(){ window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); } window.addEventListener('mousemove', move); window.addEventListener('mouseup', up); }
-
-      if(!w) return null;
-      return (
-        <div ref={ref} className={"window "+(w.anim? 'open':'')} style={{left:w.x, top:w.y, width:w.width||width, height:w.height||height, zIndex:w.z}} onMouseDown={()=> updateWindow(id, {z: Date.now()})}>
-          <div className="titlebar" onMouseDown={onTitleMouseDown}>
-            <div style={{display:'flex', gap:8, alignItems:'center'}}>
-              <span className="btn red" onClick={()=> onClose && onClose(id)}></span>
-              <span className="btn yellow" onClick={()=> onMinimize && onMinimize(id)}></span>
-              <span className="btn green" onClick={()=> onMaximize && onMaximize(id)}></span>
-            </div>
-            <div className="title">{title}</div>
-            <div className="controls"></div>
-          </div>
-          <div className="content">{children}</div>
-          <div className="resizer" onMouseDown={onResizerDown}></div>
-        </div>
-      )
+    :root[data-theme="light"]{
+      --text:#1b2040;--muted:#667093;--glass:rgba(255,255,255,.72);--glass-strong:rgba(255,255,255,.94);
+      --win-bg:linear-gradient(165deg,rgba(255,255,255,.96),rgba(240,243,255,.96));
+      --panel:rgba(30,40,90,.04);--panel-hover:rgba(30,40,90,.09);
+      --stroke:rgba(30,40,90,.11);--stroke-strong:rgba(30,40,90,.20);
+      --shadow:0 30px 80px rgba(40,50,100,.20),0 2px 10px rgba(40,50,100,.12);color-scheme:light;
     }
-
-    /* ----- Apps ----- */
-    function AppLauncher(){
-      const apps = [ {id:'text', name:'Text Editor', icon:'✎'}, {id:'paint', name:'Paint', icon:'🖌'}, {id:'term', name:'Terminal', icon:'❯'}, {id:'files', name:'Files', icon:'📁'} ];
-      const {openWindow, pushNotif} = useOS();
-      function open(app){ const win = { id:uid('w'), app:app.id, title:app.name, x:120, y:120, width:720, height:480}; openWindow(win); pushNotif({title:app.name+' opened', body:'Launched'}) }
-      return <div style={{display:'flex', gap:8}}>{apps.map(a=> <div key={a.id} className="btn-small" onClick={()=> open(a)}>{a.icon} {a.name}</div>)}</div>
+    :root[data-theme="eclipse"]{
+      --text:#e9ffe9;--muted:#7f9e8c;--glass:rgba(5,12,9,.78);--glass-strong:rgba(4,10,7,.94);
+      --win-bg:linear-gradient(165deg,rgba(10,24,16,.96),rgba(4,11,8,.97));
+      --panel:rgba(120,255,170,.045);--panel-hover:rgba(120,255,170,.09);
+      --stroke:rgba(140,255,180,.12);--stroke-strong:rgba(140,255,180,.22);color-scheme:dark;
     }
+    :root[data-accent="cyan"]{--accent:#22d3ee;--accent2:#818cf8;--accent-soft:rgba(34,211,238,.16)}
+    :root[data-accent="rose"]{--accent:#fb7185;--accent2:#f59e0b;--accent-soft:rgba(251,113,133,.16)}
+    :root[data-accent="lime"]{--accent:#a3e635;--accent2:#34d399;--accent-soft:rgba(163,230,53,.16)}
+    :root[data-accent="amber"]{--accent:#fbbf24;--accent2:#fb7185;--accent-soft:rgba(251,191,36,.16)}
+    :root[data-accent="blue"]{--accent:#60a5fa;--accent2:#c084fc;--accent-soft:rgba(96,165,250,.16)}
 
-    function FilesApp({winId}){
-      const {state, createFile, updateFile, deleteFile, openWindow} = useOS();
-      const [newName,setNewName]=useState('untitled.txt');
-      const [query,setQuery]=useState('');
+    *{box-sizing:border-box}
+    html,body,#root{height:100%;margin:0}
+    body{background:#05060d;color:var(--text);overflow:hidden;-webkit-font-smoothing:antialiased}
+    button,input,textarea,select{font:inherit;color:inherit}
+    button{cursor:pointer}
+    ::-webkit-scrollbar{width:9px;height:9px}
+    ::-webkit-scrollbar-thumb{background:rgba(150,160,210,.22);border-radius:20px;border:2px solid transparent;background-clip:padding-box}
+    ::-webkit-scrollbar-thumb:hover{background:rgba(150,160,210,.38);background-clip:padding-box}
+    ::selection{background:var(--accent);color:#fff}
 
-      function openFile(f){ const win = { id:uid('w'), app:'viewer', title:f.name, x:160, y:140, width:740, height:480, fileId:f.id }; openWindow(win); }
+    /* Desktop & wallpapers */
+    .desktop{position:relative;width:100%;height:100%;overflow:hidden;isolation:isolate}
+    .wallpaper{position:absolute;inset:0;overflow:hidden;background:#05060d;transition:filter .3s}
+    .wallpaper::before{content:"";position:absolute;inset:-30%;background:radial-gradient(38% 42% at 22% 28%,var(--w1) 0%,transparent 65%),radial-gradient(42% 46% at 78% 26%,var(--w2) 0%,transparent 62%),radial-gradient(46% 50% at 52% 88%,var(--w3) 0%,transparent 65%);filter:blur(36px);animation:drift 26s ease-in-out infinite alternate}
+    .wallpaper::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 35%,rgba(0,0,0,.55) 100%)}
+    .wall-nebula{--w1:#4c1d95;--w2:#0e7490;--w3:#db2777}
+    .wall-aurora{--w1:#065f46;--w2:#1d4ed8;--w3:#7c3aed}
+    .wall-sunset{--w1:#f97316;--w2:#be123c;--w3:#6d28d9}
+    .wall-ocean{--w1:#0e7490;--w2:#1e3a8a;--w3:#0f766e}
+    .wall-mono{--w1:#334155;--w2:#1e293b;--w3:#475569}
+    .wall-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);background-size:52px 52px;mask-image:linear-gradient(to bottom,transparent 0%,#000 35%,#000 100%);pointer-events:none}
+    .wall-glow{position:absolute;width:420px;height:420px;border:1px solid rgba(255,255,255,.07);border-radius:50%;left:50%;top:45%;transform:translate(-50%,-50%);box-shadow:0 0 160px rgba(139,92,246,.12) inset;pointer-events:none}
+    .wall-glow::before,.wall-glow::after{content:"";position:absolute;inset:16%;border:1px solid rgba(255,255,255,.05);border-radius:50%}
+    .wall-glow::after{inset:32%;border-color:var(--accent-soft)}
+    .wall-custom{position:absolute;inset:0;background-size:cover;background-position:center}
+    .wall-scan{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.014) 0 1px,transparent 1px 4px);pointer-events:none;opacity:.5}
+    @keyframes drift{0%{transform:translate3d(-3%,-2%,0) scale(1)}50%{transform:translate3d(3%,2%,0) scale(1.08)}100%{transform:translate3d(-2%,3%,0) scale(1.03)}}
 
-      function downloadFile(f){ if(f.type==='text'){ const blob=new Blob([f.content], {type:'text/plain'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=f.name; a.click(); URL.revokeObjectURL(url); } else { const a=document.createElement('a'); a.href=f.content; a.download=f.name; a.click(); } }
+    /* Shared primitives */
+    .glass{background:var(--glass);backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%);border:1px solid var(--stroke);box-shadow:var(--shadow)}
+    .panel{background:var(--panel);border:1px solid var(--stroke);border-radius:14px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--stroke);background:var(--panel);border-radius:10px;padding:7px 11px;font-size:12px;font-weight:600;color:var(--text);transition:.16s ease;white-space:nowrap}
+    .btn:hover{background:var(--panel-hover);border-color:var(--stroke-strong);transform:translateY(-1px)}
+    .btn:active{transform:translateY(0) scale(.98)}
+    .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#fff;box-shadow:0 8px 24px var(--accent-soft)}
+    .btn.icon{width:32px;height:32px;padding:0;border-radius:9px}
+    .btn.danger{color:#fb7185;border-color:rgba(251,113,133,.28)}
+    .btn.ghost{background:transparent;border-color:transparent}
+    .btn.ghost:hover{background:var(--panel-hover)}
+    input,textarea,select{background:rgba(0,0,0,.16);border:1px solid var(--stroke);border-radius:10px;padding:9px 11px;outline:none;min-width:0}
+    :root[data-theme="light"] input,:root[data-theme="light"] textarea,:root[data-theme="light"] select{background:rgba(255,255,255,.7)}
+    input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+    label{font-size:12px;color:var(--muted);font-weight:600}
+    .muted{color:var(--muted)}
+    .tiny{font-size:11px}
+    .mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+    .display{font-family:'Space Grotesk',Inter,sans-serif}
+    .row{display:flex;align-items:center;gap:8px}
+    .col{display:flex;flex-direction:column;gap:8px}
+    .grow{flex:1;min-width:0;min-height:0}
+    .sep{height:1px;background:var(--stroke);margin:8px 0}
+    .badge{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 7px;border-radius:6px;background:var(--accent-soft);color:var(--accent)}
+    .switch{width:38px;height:22px;border-radius:20px;background:rgba(140,150,190,.22);border:1px solid var(--stroke);position:relative;transition:.2s;flex:none}
+    .switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+    .switch.on{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent}
+    .switch.on::after{transform:translateX(16px)}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:8px;background:var(--panel);border:1px solid var(--stroke);font-size:11px;color:var(--muted)}
+    .empty{height:100%;min-height:180px;display:grid;place-items:center;text-align:center;color:var(--muted);gap:8px;padding:24px}
+    .empty .big{width:64px;height:64px;border-radius:20px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);margin:0 auto 10px}
 
-      function importLocal(){ document.getElementById('hidden-file-input').click(); }
+    /* Top bar */
+    .topbar{position:absolute;left:0;right:0;top:0;height:var(--topbar);z-index:1200;display:flex;align-items:center;gap:10px;padding:0 14px;background:linear-gradient(180deg,rgba(8,9,18,.66),rgba(8,9,18,.28));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,.06);font-size:12px}
+    :root[data-theme="light"] .topbar{background:linear-gradient(180deg,rgba(255,255,255,.72),rgba(255,255,255,.35))}
+    .brand{display:flex;align-items:center;gap:8px;font-family:'Space Grotesk',sans-serif;font-weight:700;letter-spacing:.14em;font-size:12px}
+    .brand-mark{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 18px var(--accent-soft)}
+    .topbar-btn{display:flex;align-items:center;gap:7px;padding:5px 10px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--text);font-size:12px;transition:.15s}
+    .topbar-btn:hover{background:var(--panel-hover);border-color:var(--stroke)}
+    .topbar-center{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;font-weight:600}
+    .topbar-right{margin-left:auto;display:flex;align-items:center;gap:4px}
+    .status-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;box-shadow:0 0 10px #4ade80}
 
-      const results = state.files.filter(f=> (f.name.toLowerCase().includes(query.toLowerCase()) || (f.content||'').toString().toLowerCase().includes(query.toLowerCase())));
+    /* Popovers */
+    .popover{position:absolute;z-index:1300;top:46px;width:320px;padding:14px;border-radius:18px;animation:pop .18s ease}
+    .popover.right{right:14px}
+    .popover.left{left:14px;width:290px}
+    @keyframes pop{from{opacity:0;transform:translateY(-8px) scale(.97)}to{opacity:1;transform:none}}
+    .quick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
+    .quick-tile{height:58px;border-radius:12px;background:var(--panel);border:1px solid var(--stroke);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;color:var(--muted);transition:.15s}
+    .quick-tile:hover{background:var(--panel-hover)}
+    .quick-tile.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+    .slider{width:100%;accent-color:var(--accent);height:4px;padding:0;border:0;background:transparent;box-shadow:none}
+    .slider:focus{box-shadow:none}
+    .notif-item{padding:10px;border-radius:12px;background:var(--panel);border:1px solid var(--stroke);margin-bottom:8px;display:flex;gap:10px;animation:toastIn .25s ease}
+    .notif-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);flex:none}
 
-      return (
-        <div style={{display:'flex', gap:12}}>
-          <div style={{width:320}} className="panel">
-            <div style={{display:'flex', gap:8, marginBottom:8}}>
-              <input value={newName} onChange={e=> setNewName(e.target.value)} />
-              <button className="btn-small" onClick={()=>{ const f={id:uid('f'), name:newName, type:'text', content:''}; createFile(f); setNewName('untitled.txt') }}>Create</button>
-            </div>
-            <div style={{display:'flex', gap:8, marginBottom:8}}>
-              <input placeholder="Search files & contents" value={query} onChange={e=> setQuery(e.target.value)} />
-              <div className="btn-small" onClick={importLocal}>Import</div>
-              <div className="btn-small" onClick={()=>{ const f={id:uid('f'), name:'export-list.txt', type:'text', content: state.files.map(x=> x.name).join('\n')}; createFile(f) }}>Export list</div>
-            </div>
-            <div style={{display:'flex', flexDirection:'column', gap:6}}>
-              {results.map(f=> (
-                <div key={f.id} className="file">
-                  <div style={{display:'flex', gap:8, alignItems:'center'}}>
-                    {f.type==='image' ? <img className="thumb" src={f.content} alt="thumb" /> : <div style={{width:48}}>{f.type}</div>}
-                    <div style={{cursor:'pointer'}} onDoubleClick={()=> openFile(f)}>{f.name}</div>
-                  </div>
-                  <div style={{display:'flex', gap:8}}>
-                    <button className="btn-small" onClick={()=> openFile(f)}>Open</button>
-                    <button className="btn-small" onClick={()=> downloadFile(f)}>Download</button>
-                    <button className="btn-small" onClick={()=> { const name=prompt('Rename', f.name); if(name) updateFile(f.id,{name}) }}>Rename</button>
-                    <button className="btn-small" onClick={()=> { if(confirm('Delete?')) deleteFile(f.id) }}>Del</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div style={{flex:1}} className="panel">
-            <div style={{marginBottom:8}}>Preview area: double click to open. Drag files onto desktop to import.</div>
-            <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px,1fr))', gap:8}}>
-              {state.files.map(f=> (
-                <div key={f.id} style={{padding:8, borderRadius:8, background:'rgba(255,255,255,0.01)'}}>
-                  <div style={{display:'flex', gap:8, alignItems:'center'}}>
-                    {f.type==='image' ? <img src={f.content} className="thumb" /> : <div style={{width:48}}>{f.type}</div>}
-                    <div style={{flex:1}}>{f.name}</div>
-                    <div style={{display:'flex', gap:6}}>
-                      <button className="btn-small" onClick={()=> openFile(f)}>Open</button>
-                      <button className="btn-small" onClick={()=> downloadFile(f)}>DL</button>
-                    </div>
-                  </div>
-                  <div style={{marginTop:8, fontSize:12, opacity:0.7}}>{f.type}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )
+    /* Desktop icons & widgets */
+    .desk-icons{position:absolute;left:16px;top:62px;display:flex;flex-direction:column;gap:4px;z-index:200}
+    .desk-icon{width:90px;padding:9px 4px;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:default;border:1px solid transparent;position:absolute;user-select:none;transition:background .15s,border .15s}
+    .desk-icon:hover{background:rgba(255,255,255,.05)}
+    .desk-icon.selected{background:var(--accent-soft);border-color:var(--accent)}
+    .desk-icon .ico{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(145deg,rgba(255,255,255,.14),rgba(255,255,255,.03));border:1px solid var(--stroke);box-shadow:0 10px 24px rgba(0,0,0,.28);color:var(--accent)}
+    .desk-icon .lbl{font-size:11px;font-weight:600;text-align:center;text-shadow:0 1px 4px rgba(0,0,0,.7);line-height:1.25}
+    .widget-stack{position:absolute;right:18px;top:62px;width:226px;display:flex;flex-direction:column;gap:12px;z-index:200}
+    .widget{padding:15px;border-radius:18px;position:relative;overflow:hidden}
+    .widget-title{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);font-weight:800;margin-bottom:10px}
+    .clock-face{width:104px;height:104px;margin:2px auto 8px;position:relative;border-radius:50%;border:1px solid var(--stroke);background:radial-gradient(circle at 40% 35%,rgba(255,255,255,.08),transparent 60%)}
+    .clock-face .tick{position:absolute;left:50%;top:50%;width:1px;height:5px;background:var(--stroke-strong);transform-origin:50% 0}
+    .hand{position:absolute;left:50%;bottom:50%;transform-origin:50% 100%;border-radius:4px;background:var(--text)}
+    .hand.h{width:3px;height:26px}.hand.m{width:2px;height:36px}.hand.s{width:1px;height:40px;background:var(--accent)}
+    .clock-center{position:absolute;left:50%;top:50%;width:7px;height:7px;border-radius:50%;background:var(--accent);transform:translate(-50%,-50%)}
+    .spark{width:100%;height:44px;overflow:visible}
+    .metric{display:flex;justify-content:space-between;font-size:11px;margin-top:6px;color:var(--muted)}
+    .metric b{color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px}
+    /* Windows */
+    .window{position:absolute;display:flex;flex-direction:column;border-radius:var(--radius);overflow:hidden;background:var(--win-bg);border:1px solid var(--stroke-strong);box-shadow:var(--shadow),0 0 0 1px rgba(0,0,0,.18);min-width:320px;min-height:200px;animation:winIn .26s cubic-bezier(.2,.9,.25,1);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+    .window.minimized{display:none}
+    .window:not(.active){box-shadow:0 18px 45px rgba(0,0,0,.4)}
+    .window.maximized{border-radius:0}
+    @keyframes winIn{from{opacity:0;transform:translateY(14px) scale(.965)}to{opacity:1;transform:none}}
+    .window::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),var(--accent2),transparent);opacity:.75;z-index:5}
+    .titlebar{height:42px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid var(--stroke);background:rgba(255,255,255,.018);cursor:grab;user-select:none}
+    .titlebar:active{cursor:grabbing}
+    .lights{display:flex;gap:7px;align-items:center}
+    .light{width:11px;height:11px;border-radius:50%;display:grid;place-items:center;font-size:8px;font-weight:800;color:rgba(0,0,0,.55);transition:.15s;cursor:pointer}
+    .light:hover{filter:brightness(1.25);transform:scale(1.15)}
+    .light.close{background:#ff5f57}.light.min{background:#febc2e}.light.max{background:#28c840}
+    .title-text{font-size:12px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .title-text .app-ico{color:var(--accent);display:flex}
+    .title-actions{margin-left:auto;display:flex;gap:4px}
+    .win-content{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+    .rz{position:absolute;z-index:20}
+    .rz.n{top:0;left:8px;right:8px;height:5px;cursor:ns-resize}
+    .rz.s{bottom:0;left:8px;right:8px;height:5px;cursor:ns-resize}
+    .rz.e{right:0;top:8px;bottom:8px;width:5px;cursor:ew-resize}
+    .rz.w{left:0;top:8px;bottom:8px;width:5px;cursor:ew-resize}
+    .rz.ne{right:0;top:0;width:12px;height:12px;cursor:nesw-resize}
+    .rz.nw{left:0;top:0;width:12px;height:12px;cursor:nwse-resize}
+    .rz.se{right:0;bottom:0;width:14px;height:14px;cursor:nwse-resize}
+    .rz.sw{left:0;bottom:0;width:12px;height:12px;cursor:nesw-resize}
+    .snap-preview{position:absolute;border:2px solid var(--accent);background:var(--accent-soft);border-radius:14px;z-index:1100;pointer-events:none;animation:pop .12s ease}
+    .statusline{height:26px;flex:none;display:flex;align-items:center;gap:12px;padding:0 12px;border-top:1px solid var(--stroke);font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+
+    /* Dock */
+    .dock{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:1250;display:flex;align-items:center;gap:6px;padding:9px 12px;border-radius:22px;max-width:calc(100vw - 24px)}
+    .dock-divider{width:1px;height:30px;background:var(--stroke);margin:0 3px}
+    .dock-app{position:relative;width:46px;height:46px;border-radius:14px;display:grid;place-items:center;border:1px solid transparent;background:transparent;color:var(--muted);transition:transform .18s cubic-bezier(.2,.9,.25,1),background .18s,color .18s}
+    .dock-app:hover{transform:translateY(-9px) scale(1.14);background:var(--panel-hover);color:var(--text)}
+    .dock-app.active{color:var(--accent);background:var(--accent-soft);border-color:var(--stroke)}
+    .dock-app::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 12px);left:50%;transform:translateX(-50%) translateY(4px);padding:5px 8px;border-radius:7px;background:var(--glass-strong);border:1px solid var(--stroke);font-size:10px;font-weight:600;white-space:nowrap;opacity:0;pointer-events:none;transition:.16s}
+    .dock-app:hover::after{opacity:1;transform:translateX(-50%)}
+    .run-dot{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--accent)}
+    .dock-clock{padding:0 10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);text-align:right;line-height:1.35}
+
+    /* Command palette */
+    .overlay{position:fixed;inset:0;z-index:9000;background:rgba(3,4,10,.62);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;justify-content:center;align-items:flex-start;padding-top:12vh;animation:fade .16s ease}
+    @keyframes fade{from{opacity:0}to{opacity:1}}
+    .palette{width:min(660px,94vw);border-radius:20px;overflow:hidden;animation:pop .2s ease}
+    .palette-input{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--stroke)}
+    .palette-input input{border:0;background:transparent;box-shadow:none;font-size:17px;padding:0}
+    .palette-input input:focus{box-shadow:none;border:0}
+    .palette-list{max-height:390px;overflow:auto;padding:8px}
+    .palette-group{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);font-weight:800;padding:9px 10px 5px}
+    .palette-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:11px;cursor:pointer;border:1px solid transparent}
+    .palette-item:hover,.palette-item.sel{background:var(--accent-soft);border-color:var(--stroke)}
+    .palette-item .pi-ico{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;background:var(--panel);color:var(--accent)}
+    .kbd{font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 6px;border-radius:5px;border:1px solid var(--stroke);background:var(--panel);color:var(--muted)}
+
+    /* Context menu, toasts, boot, lock */
+    .context-menu{position:fixed;z-index:9200;min-width:222px;padding:7px;border-radius:14px;animation:pop .14s ease}
+    .ctx-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;font-size:12px;cursor:pointer}
+    .ctx-item:hover{background:var(--accent-soft);color:var(--accent)}
+    .ctx-sep{height:1px;background:var(--stroke);margin:5px}
+    .toast-stack{position:fixed;right:18px;top:52px;z-index:9500;width:300px;display:flex;flex-direction:column;gap:9px;pointer-events:none}
+    .toast{pointer-events:auto;padding:12px;border-radius:14px;display:flex;gap:10px;animation:toastIn .28s cubic-bezier(.2,.9,.25,1);position:relative;overflow:hidden}
+    .toast::after{content:"";position:absolute;left:0;bottom:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent2));animation:toastBar 4s linear forwards}
+    @keyframes toastIn{from{opacity:0;transform:translateX(30px) scale(.96)}to{opacity:1;transform:none}}
+    @keyframes toastBar{from{width:100%}to{width:0}}
+    .boot{position:fixed;inset:0;z-index:10000;background:#04050b;display:grid;place-items:center;cursor:pointer}
+    .boot-inner{width:min(380px,86vw);text-align:center}
+    .boot-logo{width:72px;height:72px;margin:0 auto 24px;border-radius:22px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 70px var(--accent-soft);animation:breathe 2s ease-in-out infinite}
+    @keyframes breathe{50%{transform:scale(1.08);filter:brightness(1.2)}}
+    .boot-bar{height:3px;border-radius:4px;background:rgba(255,255,255,.09);overflow:hidden;margin:22px 0 12px}
+    .boot-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));animation:load 1.9s cubic-bezier(.3,.1,.2,1) forwards}
+    @keyframes load{from{width:2%}to{width:100%}}
+    .boot-log{font-family:'JetBrains Mono',monospace;font-size:10px;color:#64748b;height:16px}
+    .lock{position:fixed;inset:0;z-index:9800;display:grid;place-items:center;background:rgba(4,5,12,.72);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);cursor:pointer;text-align:center}
+    .avatar{width:76px;height:76px;margin:0 auto 16px;border-radius:50%;display:grid;place-items:center;font-family:'Space Grotesk',sans-serif;font-size:28px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 16px 50px var(--accent-soft)}
+    .drop-overlay{position:absolute;inset:16px;z-index:8000;border:2px dashed var(--accent);border-radius:24px;background:rgba(10,12,26,.72);backdrop-filter:blur(8px);display:grid;place-items:center;pointer-events:none}
+    .no-anim *{animation:none!important;transition:none!important}
+    .desktop.no-blur .topbar,.desktop.no-blur .window,.desktop.no-blur .dock,.desktop.no-blur .glass,.desktop.no-blur .popover{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+
+    /* Explorer */
+    .explorer{display:flex;height:100%;min-height:0}
+    .explorer-side{width:186px;flex:none;padding:12px 10px;border-right:1px solid var(--stroke);overflow:auto;background:rgba(0,0,0,.10)}
+    .side-label{font-size:9px;letter-spacing:.16em;color:var(--muted);font-weight:800;padding:10px 10px 6px;text-transform:uppercase}
+    .side-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;font-size:12px;cursor:pointer;color:var(--muted);font-weight:600}
+    .side-item:hover{background:var(--panel-hover);color:var(--text)}
+    .side-item.active{background:var(--accent-soft);color:var(--accent)}
+    .side-item .count{margin-left:auto;font-size:10px;opacity:.7}
+    .explorer-main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+    .explorer-head{padding:11px 14px;border-bottom:1px solid var(--stroke);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .crumbs{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);flex:1;min-width:120px}
+    .crumb{padding:4px 7px;border-radius:7px;cursor:pointer}
+    .crumb:hover{background:var(--panel-hover);color:var(--text)}
+    .file-area{flex:1;overflow:auto;padding:14px;min-height:0}
+    .file-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:11px}
+    .file-card{padding:12px 8px;border-radius:14px;border:1px solid var(--stroke);background:var(--panel);display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;transition:.16s;position:relative;min-height:120px}
+    .file-card:hover{transform:translateY(-3px);background:var(--panel-hover);border-color:var(--stroke-strong)}
+    .file-card.sel{border-color:var(--accent);background:var(--accent-soft)}
+    .file-card .thumb{width:60px;height:52px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(145deg,var(--accent-soft),rgba(0,0,0,.08));color:var(--accent);overflow:hidden}
+    .file-card .thumb img{width:100%;height:100%;object-fit:cover}
+    .file-card .name{font-size:11px;font-weight:600;text-align:center;word-break:break-word;line-height:1.3}
+    .file-card .star{position:absolute;top:6px;right:7px;color:#fbbf24}
+    .file-list{display:flex;flex-direction:column;gap:5px}
+    .file-row{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:10px;border:1px solid transparent;cursor:pointer;font-size:12px}
+    .file-row:hover{background:var(--panel-hover)}
+    .file-row.sel{background:var(--accent-soft);border-color:var(--stroke)}
+    .file-row .fi{color:var(--accent);display:flex}
+    .file-row .meta{margin-left:auto;color:var(--muted);font-size:10px;font-family:'JetBrains Mono',monospace}
+    .inspector{border-top:1px solid var(--stroke);padding:10px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(0,0,0,.08)}
+    .inline-new{display:flex;gap:6px;padding:8px;border-radius:10px;background:var(--accent-soft);border:1px solid var(--accent);margin-bottom:10px}
+    .inline-new input{flex:1;padding:6px 9px}
+
+    /* Terminal */
+    .terminal{height:100%;display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(4,7,16,.96),rgba(3,5,12,.98));font-family:'JetBrains Mono',monospace;font-size:12px;min-height:0}
+    .term-head{padding:8px 12px;border-bottom:1px solid var(--stroke);display:flex;align-items:center;gap:8px;font-size:10px;color:var(--muted)}
+    .term-body{flex:1;overflow:auto;padding:12px 14px;line-height:1.65;min-height:0;white-space:pre-wrap;word-break:break-word}
+    .term-line{border-bottom:1px solid transparent}
+    .term-prompt{color:var(--accent2)}.term-path{color:var(--accent)}
+    .term-ok{color:#4ade80}.term-warn{color:#fbbf24}.term-err{color:#fb7185}.term-dim{color:#64748b}
+    .term-input-row{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--stroke);background:rgba(255,255,255,.02)}
+    .term-input-row input{flex:1;background:transparent;border:0;box-shadow:none;padding:4px 0;color:var(--text)}
+    .term-input-row input:focus{border:0;box-shadow:none}
+
+    /* Editor */
+    .editor{height:100%;display:flex;flex-direction:column;min-height:0}
+    .tabs{display:flex;align-items:center;border-bottom:1px solid var(--stroke);background:rgba(0,0,0,.10);overflow:auto;flex:none}
+    .tab{padding:9px 13px;font-size:11px;color:var(--muted);border-right:1px solid var(--stroke);cursor:pointer;white-space:nowrap;display:flex;gap:7px;align-items:center}
+    .tab.active{background:var(--panel-hover);color:var(--text)}
+    .editor-body{flex:1;display:flex;min-height:0;position:relative}
+    .gutter{padding:12px 8px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.65;color:#58627f;background:rgba(0,0,0,.12);border-right:1px solid var(--stroke);overflow:hidden;user-select:none;min-width:48px}
+    .editor-area{flex:1;resize:none;border:0;border-radius:0;background:transparent!important;box-shadow:none!important;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.65;tab-size:2;white-space:pre;overflow:auto;min-height:0}
+    .editor-area:focus{border:0;box-shadow:none}
+    .editor-area.wrap{white-space:pre-wrap}
+    .dot{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+
+    /* Paint */
+    .paint{height:100%;display:flex;flex-direction:column;min-height:0}
+    .paint-tools{display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--stroke);flex-wrap:wrap}
+    .tool{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;border:1px solid var(--stroke);background:var(--panel);color:var(--muted)}
+    .tool.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+    .swatch{width:20px;height:20px;border-radius:6px;border:2px solid rgba(255,255,255,.25);cursor:pointer;padding:0}
+    .swatch.active{outline:2px solid var(--accent);outline-offset:2px}
+    .canvas-wrap{flex:1;min-height:0;margin:12px;border-radius:12px;overflow:hidden;border:1px solid var(--stroke);background:linear-gradient(45deg,#1b1f2e 25%,transparent 25%,transparent 75%,#1b1f2e 75%),linear-gradient(45deg,#1b1f2e 25%,#222638 25%,#222638 75%,#1b1f2e 75%);background-size:20px 20px;background-position:0 0,10px 10px}
+    .canvas-wrap canvas{width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+
+    /* Calculator, notes, monitor, gallery, settings, about */
+    .calc{height:100%;display:flex;flex-direction:column;padding:14px;gap:10px}
+    .calc-display{width:100%;text-align:right;padding:14px;border-radius:12px;background:rgba(0,0,0,.16);border:1px solid var(--stroke);font-family:'JetBrains Mono',monospace}
+    .calc-display .expr{font-size:11px;color:var(--muted);height:16px;overflow:hidden}
+    .calc-display .val{font-size:30px;font-weight:700;overflow:hidden;text-overflow:ellipsis}
+    .calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;flex:1;min-height:0}
+    .calc-key{border-radius:11px;border:1px solid var(--stroke);background:var(--panel);font-size:14px;font-weight:600;transition:.12s}
+    .calc-key:hover{background:var(--panel-hover);transform:translateY(-1px)}
+    .calc-key.op{color:var(--accent);background:var(--accent-soft)}
+    .calc-key.eq{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:0}
+    .notes{height:100%;display:flex;min-height:0}
+    .notes-list{width:190px;flex:none;border-right:1px solid var(--stroke);padding:10px;overflow:auto}
+    .note-item{padding:10px;border-radius:11px;margin-bottom:7px;cursor:pointer;border:1px solid var(--stroke);background:var(--panel)}
+    .note-item.active{border-color:var(--accent);background:var(--accent-soft)}
+    .note-item .nt{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .note-item .nb{font-size:10px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .note-main{flex:1;display:flex;flex-direction:column;padding:12px;gap:9px;min-width:0}
+    .note-main input.title{font-size:17px;font-weight:700;background:transparent;border:0;box-shadow:none;padding:4px 0}
+    .note-main input.title:focus{border:0;box-shadow:none}
+    .note-main textarea{flex:1;resize:none;background:transparent;border:0;box-shadow:none;line-height:1.7;font-size:13px}
+    .note-main textarea:focus{border:0;box-shadow:none}
+    .color-row{display:flex;gap:6px}
+    .monitor{height:100%;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+    .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .stat-card{padding:14px;border-radius:14px;background:var(--panel);border:1px solid var(--stroke)}
+    .stat-card .v{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:700}
+    .proc{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--stroke);font-size:11px}
+    .proc .bar{height:4px;border-radius:4px;background:rgba(255,255,255,.08);flex:1;overflow:hidden}
+    .proc .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+    .gallery{height:100%;display:flex;flex-direction:column;min-height:0}
+    .gallery-grid{flex:1;overflow:auto;padding:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;align-content:start}
+    .gal-card{border-radius:13px;overflow:hidden;border:1px solid var(--stroke);background:var(--panel);cursor:pointer;transition:.16s}
+    .gal-card:hover{transform:translateY(-3px);border-color:var(--accent)}
+    .gal-card img{width:100%;height:110px;object-fit:cover;display:block}
+    .gal-card .cap{padding:8px;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .lightbox{position:absolute;inset:42px 0 0;background:rgba(3,4,10,.92);z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px}
+    .lightbox img{max-width:94%;max-height:calc(100% - 70px);object-fit:contain;border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.6)}
+    .settings{height:100%;overflow:auto;padding:18px;display:flex;flex-direction:column;gap:18px}
+    .set-section{display:flex;flex-direction:column;gap:10px}
+    .set-title{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700}
+    .theme-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+    .theme-card{padding:10px;border-radius:12px;border:1px solid var(--stroke);background:var(--panel);cursor:pointer;text-align:left;font-size:11px;font-weight:600}
+    .theme-card.active{border-color:var(--accent);background:var(--accent-soft)}
+    .theme-swatch{height:36px;border-radius:8px;margin-bottom:8px}
+    .accent-row{display:flex;gap:9px}
+    .accent-dot{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer}
+    .accent-dot.active{border-color:#fff;box-shadow:0 0 0 3px var(--accent-soft)}
+    .wall-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+    .wall-card{height:62px;border-radius:11px;border:1px solid var(--stroke);cursor:pointer;position:relative;overflow:hidden}
+    .wall-card.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+    .wall-card span{position:absolute;bottom:5px;left:7px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;text-shadow:0 1px 4px #000}
+    .set-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 11px;border-radius:11px;background:var(--panel);border:1px solid var(--stroke)}
+    .about{height:100%;overflow:auto;padding:22px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+    .about-hero{width:86px;height:86px;border-radius:26px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 18px 50px var(--accent-soft)}
+    .about h1{margin:0;font-family:'Space Grotesk',sans-serif;font-size:26px;letter-spacing:.06em}
+    .spec{width:100%;display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--stroke);font-size:12px}
+    .spec span:first-child{color:var(--muted)}
+
+    /* Responsive */
+    @media (max-width:820px){
+      .widget-stack{display:none}.topbar-center{display:none}.hide-sm{display:none!important}.desk-icons{display:none}
+      .explorer-side{width:140px}.stat-grid{grid-template-columns:repeat(2,1fr)}
     }
-
-    function TextEditor({win}){
-      const {state, updateFile, pushNotif} = useOS();
-      const file = state.files.find(f=> f.id===win.fileId) || {id:null, name:win.title, content:''};
-      const [content, setContent] = useState(file.content||'');
-      useEffect(()=> setContent(file.content||''), [file && file.id]);
-
-      function save(){ if(file.id) updateFile(file.id, {content}); pushNotif({title:'Saved', body:file.name}) }
-
-      // keyboard friendly: Ctrl+S handled globally
-      useEffect(()=>{
-        function onKey(e){ if((e.ctrlKey||e.metaKey) && e.key==='s'){ e.preventDefault(); save(); } }
-        window.addEventListener('keydown', onKey); return ()=> window.removeEventListener('keydown', onKey);
-      },[content]);
-
-      return (
-        <div style={{display:'flex', flexDirection:'column', height:'100%'}}>
-          <div className="toolbar">
-            <div className="btn-small" onClick={save}>Save (Ctrl+S)</div>
-            <div style={{marginLeft:'auto'}} className="btn-small">{file.name}</div>
-          </div>
-          <textarea style={{flex:1, width:'100%'}} value={content} onChange={e=> setContent(e.target.value)} />
-        </div>
-      )
+    @media (max-width:600px){
+      .window{left:6px!important;top:46px!important;width:calc(100vw - 12px)!important;height:calc(100vh - 128px)!important;border-radius:13px}
+      .dock{bottom:8px;padding:7px 8px;gap:2px}.dock-app{width:40px;height:40px}.dock-clock{display:none}
+      .explorer-side{display:none}.toast-stack{right:8px;top:48px;width:calc(100vw - 16px)}
+      .popover.right,.popover.left{right:8px;left:8px;width:auto}.theme-cards,.wall-cards{grid-template-columns:repeat(2,1fr)}
     }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
+  <script type="text/babel" data-presets="react">
+  const {useState,useEffect,useRef,useCallback,useMemo,createContext,useContext} = React;
+  const KEY='aether-os-v4';
+  const LEGACY_KEY='react-webos-super-v1';
+  const VERSION='4.0.0';
+  const TOP=40;
 
-    function PaintApp({win}){
-      const canvasRef = useRef(); const {createFile, pushNotif} = useOS(); const drawing = useRef(false);
-      useEffect(()=>{ const c=canvasRef.current; if(!c) return; c.width=c.clientWidth; c.height=c.clientHeight; const ctx=c.getContext('2d'); ctx.fillStyle='white'; ctx.fillRect(0,0,c.width,c.height); },[])
-      function start(e){ drawing.current=true; draw(e) }
-      function stop(){ drawing.current=false }
-      function draw(e){ if(!drawing.current) return; const c=canvasRef.current; const rect=c.getBoundingClientRect(); const x=e.clientX-rect.left; const y=e.clientY-rect.top; const ctx=c.getContext('2d'); ctx.fillStyle='black'; ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fill(); }
-      function save(){ const c=canvasRef.current; const data=c.toDataURL('image/png'); const f={id:uid('f'), name:'drawing-'+Date.now()+'.png', type:'image', content:data}; createFile(f); pushNotif({title:'Saved drawing', body:f.name}); }
-      return (
-        <div style={{display:'flex', flexDirection:'column', height:'100%'}}>
-          <div className="toolbar"><div className="btn-small" onClick={save}>Save to Files</div></div>
-          <div style={{flex:1}}><canvas ref={canvasRef} style={{width:'100%', height:'100%', borderRadius:8}} onMouseDown={start} onMouseMove={draw} onMouseUp={stop} onMouseLeave={stop}></canvas></div>
-        </div>
-      )
-    }
+  /* ---------- Icon set ---------- */
+  function Icon({name,size=18,stroke=1.7,filled=false}){
+    const p={fill:'none',stroke:'currentColor',strokeWidth:stroke,strokeLinecap:'round',strokeLinejoin:'round'};
+    const f={fill:'currentColor',stroke:'none'};
+    const i={
+      grid:<g {...p}><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></g>,
+      files:<g {...p}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></g>,
+      folder:<g {...p}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></g>,
+      folderPlus:<g {...p}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v3"/><path d="M3 8v11a2 2 0 0 0 2 2h8"/><path d="M18 16v6M15 19h6"/></g>,
+      file:<g {...p}><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4"/></g>,
+      fileText:<g {...p}><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4M9 12h6M9 16h6"/></g>,
+      terminal:<g {...p}><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></g>,
+      editor:<g {...p}><path d="M4 20h16"/><path d="m14 4 6 6L9 21H3v-6z"/><path d="m12 6 6 6"/></g>,
+      paint:<g {...p}><path d="M12 3a9 9 0 0 0 0 18c1.4 0 2-1 2-2s-.8-1.5-.8-2.4c0-1 .8-1.6 1.8-1.6H18a3 3 0 0 0 3-3c0-5-4-9-9-9z"/><circle cx="7.5" cy="11.5" r="1" {...f}/><circle cx="10" cy="7.5" r="1" {...f}/><circle cx="15" cy="7.5" r="1" {...f}/></g>,
+      calc:<g {...p}><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h2M14 11h2M8 15h2M14 15h2M8 19h2M14 19h2"/></g>,
+      notes:<g {...p}><path d="M5 3h14v18l-3-2-4 2-4-2-3 2z"/><path d="M8 8h8M8 12h8M8 16h5"/></g>,
+      monitor:<g {...p}><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="m6 13 3-4 3 3 3-5 3 4"/></g>,
+      gallery:<g {...p}><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 3-3 4 4"/></g>,
+      settings:<g {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2 2-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21h-3v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-2-2 .1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3v-3h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 2-2 .1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V3h3v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 2 2-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1H21v3h-.1a1.7 1.7 0 0 0-1.5 1z"/></g>,
+      info:<g {...p}><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></g>,
+      search:<g {...p}><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></g>,
+      bell:<g {...p}><path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></g>,
+      power:<g {...p}><path d="M12 3v9"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></g>,
+      plus:<g {...p}><path d="M12 5v14M5 12h14"/></g>,
+      close:<g {...p}><path d="M6 6l12 12M18 6 6 18"/></g>,
+      up:<g {...p}><path d="m6 15 6-6 6 6"/></g>,
+      down:<g {...p}><path d="m6 9 6 6 6-6"/></g>,
+      left:<g {...p}><path d="m15 5-7 7 7 7"/></g>,
+      right:<g {...p}><path d="m9 5 7 7-7 7"/></g>,
+      upload:<g {...p}><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></g>,
+      download:<g {...p}><path d="M12 4v12m0 0 5-5m-5 5-5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></g>,
+      trash:<g {...p}><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14"/><path d="M10 11v6M14 11v6"/></g>,
+      star:<g {...p}><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z"/></g>,
+      starFill:<path d="m12 2.5 3 6.1 6.7 1-4.9 4.7 1.2 6.7L12 18l-6 3.1 1.2-6.7-4.9-4.7 6.7-1z" {...f}/>,
+      refresh:<g {...p}><path d="M20 11a8 8 0 1 0-2.3 6"/><path d="M20 4v7h-7"/></g>,
+      list:<g {...p}><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></g>,
+      sun:<g {...p}><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></g>,
+      moon:<g {...p}><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></g>,
+      wifi:<g {...p}><path d="M2 8.8a15 15 0 0 1 20 0M5.5 12a10 10 0 0 1 13 0M9 15.3a5 5 0 0 1 6 0"/><circle cx="12" cy="19" r="1" {...f}/></g>,
+      volume:<g {...p}><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9a4 4 0 0 1 0 6"/></g>,
+      battery:<g {...p}><rect x="2" y="7" width="18" height="10" rx="2"/><path d="M22 10v4"/></g>,
+      check:<g {...p}><path d="m4 12 5 5L20 6"/></g>,
+      menu:<g {...p}><path d="M4 7h16M4 12h16M4 17h16"/></g>,
+      home:<g {...p}><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></g>,
+      clock:<g {...p}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></g>,
+      cpu:<g {...p}><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></g>,
+      chart:<g {...p}><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></g>,
+      image:<g {...p}><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 3-3 4 4"/></g>,
+      music:<g {...p}><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></g>,
+      video:<g {...p}><rect x="3" y="5" width="14" height="14" rx="2"/><path d="m17 10 4-3v10l-4-3"/></g>,
+      copy:<g {...p}><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></g>,
+      edit:<g {...p}><path d="M4 20h16M14 4l6 6L9 21H3v-6z"/></g>,
+      save:<g {...p}><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/></g>,
+      undo:<g {...p}><path d="M9 7 4 12l5 5"/><path d="M4 12h10a6 6 0 0 1 0 12"/></g>,
+      redo:<g {...p}><path d="m15 7 5 5-5 5"/><path d="M20 12H10a6 6 0 0 0 0 12"/></g>,
+      brush:<g {...p}><path d="M14 4l6 6L11 19H5v-6z"/><path d="M5 19c0 2-1 3-3 3 0-2 1-3 3-3z"/></g>,
+      eraser:<g {...p}><path d="m4 15 8-8 7 7-5 5H8z"/><path d="M8 19h12"/></g>,
+      square:<g {...p}><rect x="4" y="4" width="16" height="16" rx="2"/></g>,
+      circle:<g {...p}><circle cx="12" cy="12" r="8"/></g>,
+      line:<g {...p}><path d="M5 19 19 5"/></g>,
+      palette:<g {...p}><path d="M12 3a9 9 0 1 0 0 18h2a2 2 0 0 0 0-4h-1a2 2 0 0 1 0-4h4a4 4 0 0 0 4-4c0-3.3-4-6-9-6z"/><circle cx="7.5" cy="11" r="1" {...f}/><circle cx="10" cy="7.5" r="1" {...f}/><circle cx="15" cy="7.5" r="1" {...f}/></g>,
+      play:<path d="M7 4v16l13-8z" {...f}/>,
+      reset:<g {...p}><path d="M4 11a8 8 0 1 1 2 6"/><path d="M4 4v7h7"/></g>,
+      sparkles:<g {...p}><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="m19 16 .8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></g>,
+      activity:<g {...p}><path d="M2 12h4l3-8 5 16 3-8h5"/></g>,
+      globe:<g {...p}><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></g>,
+      user:<g {...p}><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></g>,
+      bolt:<path d="M13 2 4 14h7l-1 8 10-13h-7z" {...f}/>,
+      eye:<g {...p}><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></g>,
+      keyboard:<g {...p}><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M18 13h.01M8 16h8"/></g>,
+      shield:<g {...p}><path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/></g>,
+      lock:<g {...p}><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></g>
+    };
+    return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">{i[name]||i.file}</svg>;
+  }
 
-    function Viewer({win}){
-      const {state} = useOS(); const file = state.files.find(f=> f.id===win.fileId) || null;
-      if(!file) return <div>No file</div>;
-      if(file.type==='text') return <div style={{whiteSpace:'pre-wrap'}}>{file.content}</div>;
-      if(file.type==='image') return <img src={file.content} style={{maxWidth:'100%', maxHeight:'100%'}} />;
-      if(file.type==='audio') return <audio controls src={file.content} />;
-      if(file.type==='video') return <video controls src={file.content} style={{maxWidth:'100%'}} />;
-      return <div>Unknown file type</div>;
-    }
+  /* ---------- Registry & helpers ---------- */
+  const APPS=[
+    {id:'explorer',name:'Explorer',icon:'files',w:840,h:540},
+    {id:'terminal',name:'Terminal',icon:'terminal',w:700,h:440},
+    {id:'editor',name:'Code Editor',icon:'editor',w:760,h:520},
+    {id:'paint',name:'Paint Studio',icon:'paint',w:780,h:540},
+    {id:'gallery',name:'Gallery',icon:'gallery',w:760,h:520},
+    {id:'notes',name:'Notes',icon:'notes',w:620,h:460},
+    {id:'calc',name:'Calculator',icon:'calc',w:330,h:470},
+    {id:'monitor',name:'System Monitor',icon:'activity',w:680,h:500},
+    {id:'settings',name:'Settings',icon:'settings',w:640,h:540},
+    {id:'about',name:'About',icon:'info',w:480,h:480}
+  ];
+  const appById=id=>APPS.find(a=>a.id===id)||APPS[0];
+  const uid=(p='id')=>p+'-'+Math.random().toString(36).slice(2,10);
+  const formatDate=t=>{try{return new Date(t).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}catch(e){return '—'}};
 
-    function Terminal({win}){
-      const {state, createFile, pushNotif, updateFile, deleteFile} = useOS(); const [lines,setLines]=useState(['Fake terminal. `help` for commands.']); const inputRef=useRef();
-      function append(t){ setLines(l=> [...l, t]); }
-      function run(raw){ const parts=raw.split(' ').filter(Boolean); const cmd=parts[0]; if(!cmd) return; if(cmd==='help'){ append('commands: ls, cat <name>, touch <name>, rm <name>, import-list, save <name> <text>') }
-      else if(cmd==='ls'){ append(state.files.map(f=> f.name).join('\n')||'(no files)') }
-      else if(cmd==='cat'){ const name=parts[1]; const f=state.files.find(x=> x.name===name); append(f?f.content:'not found') }
-      else if(cmd==='touch'){ const name=parts[1]||('file-'+Date.now()+'.txt'); createFile({id:uid('f'), name, type:'text', content:''}); append('created '+name) }
-      else if(cmd==='rm'){ const name=parts[1]; const f=state.files.find(x=> x.name===name); if(f){ deleteFile(f.id); append('deleted '+name) } else append('not found') }
-      else if(cmd==='import-list'){ append(state.files.map(f=> f.name).join('\n')) }
-      else if(cmd==='save'){ const name=parts[1]; const text = parts.slice(2).join(' '); const f = state.files.find(x=> x.name===name); if(f){ updateFile(f.id, {content:text}); append('saved'); } else { createFile({id:uid('f'), name, type:'text', content:text}); append('created and saved '+name) } }
-      else append('unknown: '+cmd);
+  function artUrl(a,b,title){
+    const svg='<svg xmlns="http://www.w3.org/2000/svg" width="900" height="560"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="'+a+'"/><stop offset="1" stop-color="'+b+'"/></linearGradient><radialGradient id="r"><stop stop-color="#fff" stop-opacity=".5"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs><rect width="900" height="560" fill="url(#g)"/><circle cx="260" cy="190" r="190" fill="url(#r)"/><circle cx="690" cy="420" r="240" fill="url(#r)" opacity=".5"/><path d="M0 420 Q220 300 450 410 T900 350 V560 H0Z" fill="#000" opacity=".18"/><text x="44" y="510" font-family="sans-serif" font-size="26" font-weight="700" fill="#fff" opacity=".85">'+title+'</text></svg>';
+    return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+  }
+  function defaultState(){
+    const t=Date.now();
+    const f=(id,name,type,content,extra={})=>({id,name,type,content:content||'',folder:'root',created:t,modified:t,starred:false,trashed:false,...extra});
+    return {
+      version:4,
+      settings:{theme:'dark',accent:'violet',wallpaper:'nebula',customWallpaper:null,animations:true,showIcons:true,blur:true,brightness:100,iconPositions:{}},
+      files:[
+        f('f-welcome','welcome.md','text','# Welcome to AETHER OS\n\nYou are inside a full desktop environment running in a single HTML file.\n\n## Shortcuts\n- Ctrl / Cmd + K  — command palette\n- Ctrl / Cmd + N  — new note\n- Ctrl / Cmd + S  — save in editor\n- Alt + Tab       — cycle windows\n- Esc             — close overlays / top window\n\nRight-click the desktop for quick actions. Drag files here to import them.\n',{starred:true}),
+        f('f-folder','Field Notes','folder','',{starred:true}),
+        f('f-ideas','ideas.txt','text','01. Build something nobody expects.\n02. Make every pixel intentional.\n03. Ship it.\n',{folder:'f-folder'}),
+        f('f-art1','nebula-study.svg','image',artUrl('#6d28d9','#0891b2','NEBULA / 01'),{starred:true}),
+        f('f-art2','aurora-study.svg','image',artUrl('#065f46','#4f46e5','AURORA / 02')),
+        f('f-note','Quick idea','note','Design the control center like a cockpit, not a settings page.',{color:'#8b5cf6'})
+      ],
+      windows:[],
+      favorites:['explorer','terminal','editor','paint','notes','settings'],
+      iconPositions:{},
+      notifications:[]
+    };
+  }
+  function normalize(s){
+    const d=defaultState();
+    const out={...d,...s};
+    out.settings={...d.settings,...(s.settings||{})};
+    out.files=Array.isArray(s.files)?s.files.map(f=>({...f,folder:f.folder||'root',created:f.created||Date.now(),modified:f.modified||Date.now(),starred:!!f.starred,trashed:!!f.trashed})):d.files;
+    out.windows=Array.isArray(s.windows)?s.windows.filter(w=>w&&w.app):[];
+    out.favorites=Array.isArray(s.favorites)?s.favorites:d.favorites;
+    out.iconPositions=s.iconPositions||{};
+    out.notifications=[];
+    return out;
+  }
+  function loadState(){
+    try{
+      const raw=localStorage.getItem(KEY);
+      if(raw){const s=JSON.parse(raw);if(s&&s.version===4)return normalize(s)}
+      const old=localStorage.getItem(LEGACY_KEY);
+      if(old){
+        JSON.parse(old);
+        const d=defaultState();
+        d.notifications=[{id:uid('n'),title:'Welcome to AETHER OS',body:'Your workspace has been upgraded.',icon:'sparkles',ts:Date.now()}];
+        return d;
       }
-      return (
-        <div style={{display:'flex', flexDirection:'column', height:'100%'}}>
-          <div className="terminal" style={{flex:1}}>{lines.map((ln,i)=> <div key={i}>{ln}</div>)}</div>
-          <div style={{display:'flex', gap:8}}>
-            <input ref={inputRef} onKeyDown={e=>{ if(e.key==='Enter'){ run(e.target.value); e.target.value=''; } }} placeholder="command" />
-            <div className="btn-small" onClick={()=> { const v=inputRef.current.value; run(v); inputRef.current.value=''; }}>Run</div>
+    }catch(e){}
+    return defaultState();
+  }
+  function saveState(s){try{localStorage.setItem(KEY,JSON.stringify({...s,notifications:[]}))}catch(e){console.warn('AETHER: storage full',e)}}
+  function readFileAsDataURL(file){return new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(file)})}
+  function readFileAsText(file){return new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsText(file)})}
+  function typeFromFile(file){
+    if(file.type.startsWith('image/'))return 'image';
+    if(file.type.startsWith('audio/'))return 'audio';
+    if(file.type.startsWith('video/'))return 'video';
+    return 'text';
+  }
+  function fileIcon(f){
+    if(f.type==='folder')return 'folder';
+    if(f.type==='image')return 'image';
+    if(f.type==='audio')return 'music';
+    if(f.type==='video')return 'video';
+    if(f.type==='note')return 'notes';
+    return 'fileText';
+  }
+  /* ---------- OS context ---------- */
+  const OSContext=createContext(null);
+  const useOS=()=>useContext(OSContext);
+
+  function OSProvider({children}){
+    const [state,setState]=useState(loadState);
+    const zRef=useRef(Date.now());
+    useEffect(()=>{const t=setTimeout(()=>saveState(state),300);return()=>clearTimeout(t)},[state]);
+    useEffect(()=>{
+      document.documentElement.dataset.theme=state.settings.theme;
+      document.documentElement.dataset.accent=state.settings.accent;
+      document.documentElement.classList.toggle('no-anim',!state.settings.animations);
+    },[state.settings.theme,state.settings.accent,state.settings.animations]);
+
+    const notify=useCallback((title,body='',icon='sparkles')=>{
+      const n={id:uid('n'),title,body,icon,ts:Date.now()};
+      setState(s=>({...s,notifications:[...s.notifications,n].slice(-8)}));
+      setTimeout(()=>setState(s=>({...s,notifications:s.notifications.filter(x=>x.id!==n.id)})),4200);
+    },[]);
+    const z=()=>{zRef.current+=1;return zRef.current};
+
+    const openApp=useCallback((appId,opts={})=>{
+      const a=appById(appId);
+      setState(s=>{
+        const count=s.windows.length;
+        const w={id:opts.id||uid('w'),app:appId,title:opts.title||a.name,
+          x:opts.x!=null?opts.x:Math.min(90+count*26,Math.max(20,window.innerWidth-380)),
+          y:opts.y!=null?opts.y:Math.min(64+count*22,Math.max(50,window.innerHeight-260)),
+          w:opts.w||a.w,h:opts.h||a.h,z:z(),minimized:false,maximized:false,prev:null,fileId:opts.fileId||null};
+        return {...s,windows:[...s.windows.filter(x=>x.id!==w.id),w]};
+      });
+    },[]);
+
+    const openFile=useCallback(file=>{
+      if(file.type==='folder'){notify('Folder',file.name,'folder');return}
+      if(file.type==='image')openApp('gallery',{title:file.name,fileId:file.id,w:820,h:560});
+      else if(file.type==='audio'||file.type==='video')openApp('viewer',{title:file.name,fileId:file.id,w:640,h:460});
+      else if(file.type==='note')openApp('notes',{title:'Notes',fileId:file.id});
+      else openApp('editor',{title:file.name,fileId:file.id});
+    },[openApp,notify]);
+
+    const api={
+      state,openApp,openFile,notify,
+      updateWindow:(id,patch)=>setState(s=>({...s,windows:s.windows.map(w=>w.id===id?{...w,...patch}:w)})),
+      closeWindow:id=>setState(s=>({...s,windows:s.windows.filter(w=>w.id!==id)})),
+      focusWindow:id=>setState(s=>({...s,windows:s.windows.map(w=>w.id===id?{...w,z:z(),minimized:false}:w)})),
+      minimizeWindow:id=>setState(s=>({...s,windows:s.windows.map(w=>w.id===id?{...w,minimized:true}:w)})),
+      toggleMaximize:id=>setState(s=>({...s,windows:s.windows.map(w=>{
+        if(w.id!==id)return w;
+        if(w.maximized)return {...w,...(w.prev||{}),maximized:false,prev:null};
+        return {...w,prev:{x:w.x,y:w.y,w:w.w,h:w.h},x:0,y:TOP,w:window.innerWidth,h:window.innerHeight-TOP-92,maximized:true};
+      })})),
+      snapWindow:(id,side)=>setState(s=>({...s,windows:s.windows.map(w=>{
+        if(w.id!==id)return w;
+        const H=window.innerHeight-TOP-92,W=window.innerWidth;
+        const geo=side==='left'?{x:0,y:TOP,w:W/2,h:H}:side==='right'?{x:W/2,y:TOP,w:W/2,h:H}:side==='top'?{x:0,y:TOP,w:W,h:H}:{x:W*.08,y:TOP+24,w:W*.84,h:H*.86};
+        return {...w,...geo,maximized:false,prev:null};
+      })})),
+      createFile:file=>{setState(s=>({...s,files:[...s.files,{id:uid('f'),folder:'root',created:Date.now(),modified:Date.now(),starred:false,trashed:false,...file}]}));notify('Created',file.name||'New file',file.type==='folder'?'folder':'fileText')},
+      updateFile:(id,patch)=>setState(s=>({...s,files:s.files.map(f=>f.id===id?{...f,...patch,modified:Date.now()}:f)})),
+      deleteFile:id=>{setState(s=>({...s,files:s.files.map(f=>f.id===id?{...f,trashed:true}:f)}));notify('Moved to Trash','Restorable from Trash','trash')},
+      restoreFile:id=>setState(s=>({...s,files:s.files.map(f=>f.id===id?{...f,trashed:false}:f)})),
+      purgeFile:id=>setState(s=>({...s,files:s.files.filter(f=>f.id!==id)})),
+      emptyTrash:()=>{setState(s=>({...s,files:s.files.filter(f=>!f.trashed)}));notify('Trash emptied','All items permanently removed','trash')},
+      setSetting:patch=>setState(s=>({...s,settings:{...s.settings,...patch}})),
+      clearNotifications:()=>setState(s=>({...s,notifications:[]})),
+      toggleFavorite:appId=>setState(s=>({...s,favorites:s.favorites.includes(appId)?s.favorites.filter(x=>x!==appId):[...s.favorites,appId]})),
+      importFiles:async files=>{
+        for(const file of Array.from(files||[])){
+          try{
+            const type=typeFromFile(file);
+            const content=type==='text'?await readFileAsText(file):await readFileAsDataURL(file);
+            setState(s=>({...s,files:[...s.files,{id:uid('f'),name:file.name,type,content,folder:'root',created:Date.now(),modified:Date.now(),starred:false,trashed:false}]}));
+            notify('Imported',file.name,'upload');
+          }catch(e){notify('Import failed',file.name,'close')}
+        }
+      },
+      downloadFile:f=>{
+        const text=f.type==='text'||f.type==='note';
+        const href=text?URL.createObjectURL(new Blob([f.content],{type:'text/plain'})):f.content;
+        const a=document.createElement('a');a.href=href;a.download=f.name;document.body.appendChild(a);a.click();a.remove();
+        if(text)setTimeout(()=>URL.revokeObjectURL(href),1000);
+      },
+      replaceState:next=>setState(normalize({...next,version:4})),
+      topWindow:()=>state.windows.filter(w=>!w.minimized).reduce((a,w)=>!a||w.z>a.z?w:a,null)
+    };
+    return <OSContext.Provider value={api}>{children}</OSContext.Provider>;
+  }
+
+  /* ---------- Reusable UI ---------- */
+  function ToolButton({icon,title,onClick,active,disabled}){
+    return <button className={'btn icon '+(active?'primary':'')} title={title} onClick={onClick} disabled={disabled} style={{opacity:disabled?.4:1}}><Icon name={icon} size={15}/></button>;
+  }
+  function Toggle({checked,onChange,label,desc}){
+    return <div className="set-row"><div><div style={{fontSize:12,fontWeight:600}}>{label}</div>{desc&&<div className="tiny muted">{desc}</div>}</div><button className={'switch '+(checked?'on':'')} onClick={()=>onChange(!checked)} aria-label={label}/></div>;
+  }
+  function Sparkline({data,color,height=44}){
+    const max=Math.max(...data,10),min=Math.min(...data,0);
+    const pts=data.map((v,i)=>`${(i/(data.length-1||1))*100},${height-4-((v-min)/((max-min)||1))*(height-10)}`).join(' ');
+    return <svg className="spark" viewBox={`0 0 100 ${height}`} preserveAspectRatio="none"><polyline points={pts} fill="none" stroke={color||'var(--accent)'} strokeWidth="1.6" vectorEffect="non-scaling-stroke"/></svg>;
+  }
+
+  /* ---------- Window frame ---------- */
+  function WindowFrame({win,children}){
+    const {updateWindow,closeWindow,minimizeWindow,toggleMaximize,focusWindow,snapWindow,state}=useOS();
+    const gesture=useRef(null);
+    const [snapHint,setSnapHint]=useState(null);
+    const active=state.windows.filter(w=>!w.minimized).reduce((a,w)=>!a||w.z>a.z?w:a,null)?.id===win.id;
+    const a=appById(win.app);
+
+    useEffect(()=>{
+      function move(e){
+        const g=gesture.current;if(!g)return;
+        if(g.kind==='drag'){
+          let x=g.x+e.clientX-g.sx,y=g.y+e.clientY-g.sy;
+          x=Math.max(-g.w+90,Math.min(x,window.innerWidth-90));
+          y=Math.max(0,Math.min(y,window.innerHeight-50));
+          updateWindow(g.id,{x,y});
+          const side=e.clientX<9?'left':e.clientX>window.innerWidth-9?'right':e.clientY<9?'top':null;
+          setSnapHint(side);
+        }else{
+          const dx=e.clientX-g.sx,dy=e.clientY-g.sy;
+          let {x,y,w,h}=g;
+          if(g.dir.includes('e'))w=Math.max(320,g.w+dx);
+          if(g.dir.includes('s'))h=Math.max(200,g.h+dy);
+          if(g.dir.includes('w')){w=Math.max(320,g.w-dx);x=g.x+(g.w-w)}
+          if(g.dir.includes('n')){h=Math.max(200,g.h-dy);y=g.y+(g.h-h)}
+          updateWindow(g.id,{x,y,w,h});
+        }
+      }
+      function up(){
+        const g=gesture.current;if(!g)return;
+        if(g.kind==='drag'&&snapHint)snapWindow(g.id,snapHint);
+        gesture.current=null;setSnapHint(null);document.body.style.userSelect='';
+      }
+      window.addEventListener('pointermove',move);
+      window.addEventListener('pointerup',up);
+      return()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up)};
+    },[snapHint]);
+
+    function startDrag(e){
+      if(e.target.closest('.light')||e.target.closest('.title-actions')||win.maximized)return;
+      focusWindow(win.id);
+      gesture.current={kind:'drag',id:win.id,sx:e.clientX,sy:e.clientY,x:win.x,y:win.y,w:win.w,h:win.h};
+      document.body.style.userSelect='none';
+    }
+    function startResize(e,dir){
+      e.stopPropagation();focusWindow(win.id);
+      gesture.current={kind:'resize',id:win.id,dir,sx:e.clientX,sy:e.clientY,x:win.x,y:win.y,w:win.w,h:win.h};
+      document.body.style.userSelect='none';
+    }
+    const hintStyle=snapHint==='left'?{left:0,top:TOP,width:'50%',height:window.innerHeight-TOP-92}:snapHint==='right'?{right:0,top:TOP,width:'50%',height:window.innerHeight-TOP-92}:snapHint==='top'?{left:0,top:TOP,width:'100%',height:window.innerHeight-TOP-92}:null;
+
+    return <>
+      {snapHint&&hintStyle&&<div className="snap-preview" style={hintStyle}/>}
+      <div className={'window '+(win.minimized?'minimized ':'')+(win.maximized?'maximized ':'')+(active?'active':'')}
+        style={{left:win.x,top:win.y,width:win.w,height:win.h,zIndex:win.z}}
+        onPointerDown={()=>{if(!active)focusWindow(win.id)}}>
+        <div className="titlebar" onPointerDown={startDrag} onDoubleClick={()=>toggleMaximize(win.id)}>
+          <div className="lights">
+            <span className="light close" title="Close" onPointerDown={e=>e.stopPropagation()} onClick={()=>closeWindow(win.id)}>×</span>
+            <span className="light min" title="Minimize" onPointerDown={e=>e.stopPropagation()} onClick={()=>minimizeWindow(win.id)}>−</span>
+            <span className="light max" title="Maximize" onPointerDown={e=>e.stopPropagation()} onClick={()=>toggleMaximize(win.id)}>{win.maximized?'❐':'+'}</span>
+          </div>
+          <div className="title-text"><span className="app-ico"><Icon name={a.icon} size={14}/></span>{win.title}</div>
+          <div className="title-actions">
+            {!win.maximized&&<>
+              <button className="btn ghost icon" title="Snap left" onPointerDown={e=>e.stopPropagation()} onClick={()=>snapWindow(win.id,'left')}><Icon name="left" size={13}/></button>
+              <button className="btn ghost icon" title="Snap right" onPointerDown={e=>e.stopPropagation()} onClick={()=>snapWindow(win.id,'right')}><Icon name="right" size={13}/></button>
+            </>}
           </div>
         </div>
-      )
-    }
-
-    /* ----- Shell ----- */
-    function WindowShell(){
-      const {state, closeWindow, updateWindow} = useOS();
-      function renderApp(w){ if(w.app==='files') return <FilesApp winId={w.id} />; if(w.app==='text') return <TextEditor win={w} />; if(w.app==='paint') return <PaintApp win={w} />; if(w.app==='term') return <Terminal win={w} />; if(w.app==='viewer') return <Viewer win={w} />; if(w.app==='settings') return <SettingsApp win={w} />; return <div>Unknown app</div> }
-      return <>{state.windows.map(w=> (
-        <Window key={w.id} id={w.id} title={w.title} width={w.width} height={w.height} x={w.x} y={w.y} onClose={(id)=> closeWindow(id)} onMinimize={(id)=> updateWindow(id,{minimized:true})} onMaximize={(id)=> updateWindow(id,{width:window.innerWidth-80, height:window.innerHeight-160, x:40, y:40})}>{ renderApp(w) }</Window>
-      ))}</>
-    }
-
-    /* ----- Desktop UI ----- */
-    function Desktop(){
-      const {state, openWindow, setSettings, pushNotif, createFile} = useOS();
-      const [dropActive,setDropActive]=useState(false);
-
-      useEffect(()=>{ function onDrop(e){ e.preventDefault(); setDropActive(false); const files = Array.from(e.dataTransfer.files||[]); files.forEach(async file=>{ if(file.type.startsWith('image/')){ const data=await readFileAsDataURL(file); createFile({id:uid('f'), name:file.name, type:'image', content:data}); pushNotif({title:'Imported', body:file.name}); } else if(file.type.startsWith('audio/')){ const data=await readFileAsDataURL(file); createFile({id:uid('f'), name:file.name, type:'audio', content:data}); pushNotif({title:'Imported audio', body:file.name}); } else if(file.type.startsWith('video/')){ const data=await readFileAsDataURL(file); createFile({id:uid('f'), name:file.name, type:'video', content:data}); pushNotif({title:'Imported video', body:file.name}); } else { const text=await readFileAsText(file); createFile({id:uid('f'), name:file.name, type:'text', content:text}); pushNotif({title:'Imported text', body:file.name}); } }) }
-        function onDragOver(e){ e.preventDefault(); setDropActive(true); }
-        function onDragLeave(e){ setDropActive(false); }
-        window.addEventListener('drop', onDrop); window.addEventListener('dragover', onDragOver); window.addEventListener('dragleave', onDragLeave);
-        return ()=>{ window.removeEventListener('drop', onDrop); window.removeEventListener('dragover', onDragOver); window.removeEventListener('dragleave', onDragLeave); }
-      },[])
-
-      function openSettings(){ openWindow({ id:uid('w'), app:'settings', title:'Settings', x:80, y:80, width:420, height:360 }); }
-
-      return (
-        <div className={"desktop "+(dropActive? 'drop-active':'')} style={{background: state.settings.wallpaper ? `url(${state.settings.wallpaper}) center/cover` : 'linear-gradient(135deg,#071124 0%, #0d1726 100%)'}}>
-          <div style={{position:'absolute', left:12, top:12}}>
-            <div style={{display:'flex', gap:8, alignItems:'center'}}>
-              <div style={{fontWeight:700}}>React WebOS — Super Extreme</div>
-              <div className="btn-small" onClick={()=> openWindow({ id:uid('w'), app:'files', title:'Files', x:120, y:120, width:860, height:520 })}>Files</div>
-              <div className="btn-small" onClick={()=> openWindow({ id:uid('w'), app:'term', title:'Terminal', x:140, y:140, width:620, height:360 })}>Terminal</div>
-              <div className="btn-small" onClick={openSettings}>Settings</div>
-              <div style={{marginLeft:12}} className="search-hint">Press <b>Ctrl+K</b> to focus search</div>
-            </div>
-          </div>
-
-          <div style={{position:'absolute', left:12, top:72}}>
-            <AppLauncher />
-          </div>
-
-          <div style={{position:'absolute', right:12, top:12}} className="drop-hint">Drop files here to import</div>
-
-          <WindowShell />
-
-          <Taskbar />
-
-          <Notifications />
-
-          {/* hidden file input for import */}
-          <input id="hidden-file-input" type="file" style={{display:'none'}} onChange={async (e)=>{ const file=e.target.files[0]; if(!file) return; if(file.type.startsWith('image/')){ const data=await readFileAsDataURL(file); createFile({id:uid('f'), name:file.name, type:'image', content:data}); pushNotif({title:'Imported', body:file.name}); } else if(file.type.startsWith('audio/')){ const data=await readFileAsDataURL(file); createFile({id:uid('f'), name:file.name, type:'audio', content:data}); pushNotif({title:'Imported audio', body:file.name}); } else if(file.type.startsWith('video/')){ const data=await readFileAsDataURL(file); createFile({id:uid('f'), name:file.name, type:'video', content:data}); pushNotif({title:'Imported video', body:file.name}); } else { const text=await readFileAsText(file); createFile({id:uid('f'), name:file.name, type:'text', content:text}); pushNotif({title:'Imported text', body:file.name}); } e.target.value=''; }} />
-        </div>
-      )
-    }
-
-    function Taskbar(){ const {state, updateWindow, closeWindow} = useOS(); const apps = state.windows; return (
-      <div className="dock">
-        <div style={{display:'flex', gap:8, alignItems:'center'}}>
-          <div className="btn-small">Menu</div>
-          <div className="btn-small">Apps</div>
-        </div>
-        <div style={{flex:1}}></div>
-        <div style={{display:'flex', gap:8}}>
-          {apps.map(a=> <div key={a.id} className="task" onClick={()=> updateWindow(a.id, {z: Date.now()})}>{a.title}</div>)}
-        </div>
+        <div className="win-content">{children}</div>
+        {!win.maximized&&['n','s','e','w','ne','nw','se','sw'].map(d=><div key={d} className={'rz '+d} onPointerDown={e=>startResize(e,d)}/>)}
       </div>
-    ) }
+    </>;
+  }
+  /* ---------- Explorer ---------- */
+  function ExplorerApp({win}){
+    const {state,createFile,updateFile,deleteFile,restoreFile,purgeFile,emptyTrash,downloadFile,openFile,openApp}=useOS();
+    const [path,setPath]=useState(['root']);
+    const [view,setView]=useState('grid');
+    const [query,setQuery]=useState('');
+    const [selected,setSelected]=useState(null);
+    const [sort,setSort]=useState('name');
+    const [newItem,setNewItem]=useState(null);
+    const [rename,setRename]=useState(null);
+    const cur=path[path.length-1];
+    const inTrash=cur==='trash';
+    const live=state.files.filter(f=>!f.trashed);
+    let items;
+    if(query.trim())items=state.files.filter(f=>inTrash?f.trashed:!f.trashed).filter(f=>f.name.toLowerCase().includes(query.toLowerCase()));
+    else items=state.files.filter(f=>(f.folder||'root')===cur&&(inTrash?f.trashed:!f.trashed));
+    items=[...items].sort((a,b)=>{
+      if(sort==='date')return b.modified-a.modified;
+      if(sort==='type')return a.type.localeCompare(b.type);
+      if(sort==='size')return (b.content||'').length-(a.content||'').length;
+      return a.name.localeCompare(b.name);
+    });
+    const crumbs=path.map((id,i)=>{
+      const f=id==='root'?null:state.files.find(x=>x.id===id);
+      return <span key={id}><span className="crumb" onClick={()=>setPath(path.slice(0,i+1))}>{id==='root'?'Home':id==='trash'?'Trash':(f?f.name:'Unknown')}</span>{i<path.length-1&&<span style={{opacity:.4}}>/</span>}</span>;
+    });
+    function addItem(){
+      const name=(newItem?.name||'').trim();if(!name)return setNewItem(null);
+      createFile({name,type:newItem.type,content:'',color:newItem.type==='note'?'#8b5cf6':undefined});
+      setNewItem(null);
+    }
+    function openItem(f){
+      if(f.type==='folder'){setPath([...path,f.id]);setQuery('');setSelected(null)}
+      else openFile(f);
+    }
+    const selectedFile=state.files.find(x=>x.id===selected);
 
-    function Notifications(){ const {state, removeNotif} = useOS(); return (<div>{state.notifications.map(n=> (<div key={n.id} className="notif"><b>{n.title}</b><div style={{fontSize:12}}>{n.body}</div><div style={{marginTop:6}}><button className="btn-small" onClick={()=> removeNotif(n.id)}>Dismiss</button></div></div>))}</div>) }
-
-    function SettingsApp({win}){
-      const {state, setSettings, pushNotif} = useOS(); const [wall,setWall]=useState(state.settings.wallpaper||''); const [theme,setTheme]=useState(state.settings.theme||'dark'); useEffect(()=>{ setWall(state.settings.wallpaper||''); setTheme(state.settings.theme||'dark') }, [state.settings]); function save(){ setSettings({wallpaper:wall, theme}); pushNotif({title:'Settings saved'}) }
-      return (<div style={{display:'flex', flexDirection:'column', gap:8}}>
-        <div>Wallpaper URL</div>
-        <input value={wall} onChange={e=> setWall(e.target.value)} placeholder="image url or data url" />
-        <div>Theme</div>
-        <select value={theme} onChange={e=> setTheme(e.target.value)}><option value="dark">Dark</option><option value="light">Light</option></select>
-        <div style={{display:'flex', gap:8}}>
-          <div className="btn-small" onClick={save}>Save</div>
-          <div className="btn-small" onClick={()=> { setWall(''); setTheme('dark'); setSettings({wallpaper:null, theme:'dark'}) }}>Reset</div>
+    return <div className="explorer">
+      <aside className="explorer-side">
+        <div className="side-label">Locations</div>
+        <div className={'side-item '+(cur==='root'&&!query?'active':'')} onClick={()=>{setPath(['root']);setQuery('')}}><Icon name="home" size={15}/>Home<span className="count">{live.filter(f=>(f.folder||'root')==='root').length}</span></div>
+        <div className={'side-item '+(query?'active':'')} onClick={()=>document.getElementById('exp-search-'+win.id)?.focus()}><Icon name="search" size={15}/>Search</div>
+        <div className={'side-item '+(inTrash?'active':'')} onClick={()=>{setPath(['root','trash']);setQuery('')}}><Icon name="trash" size={15}/>Trash<span className="count">{state.files.filter(f=>f.trashed).length}</span></div>
+        <div className="side-label">Library</div>
+        <div className="side-item" onClick={()=>{setQuery('');setPath(['root']);setSort('date')}}><Icon name="clock" size={15}/>Recent</div>
+        <div className="side-item" onClick={()=>{setQuery('');setPath(['root']);setSort('name')}}><Icon name="star" size={15}/>All files<span className="count">{live.length}</span></div>
+        <div className="side-label">Folders</div>
+        {live.filter(f=>f.type==='folder'&&(f.folder||'root')==='root').map(f=><div key={f.id} className="side-item" onClick={()=>{setPath(['root',f.id]);setQuery('')}}><Icon name="folder" size={15}/>{f.name}</div>)}
+        <div className="sep"/>
+        <div className="side-item" onClick={()=>openApp('settings')}><Icon name="settings" size={15}/>Preferences</div>
+      </aside>
+      <main className="explorer-main">
+        <div className="explorer-head">
+          <button className="btn icon" onClick={()=>path.length>1&&setPath(path.slice(0,-1))} disabled={path.length<2}><Icon name="left" size={14}/></button>
+          <div className="crumbs">{crumbs}</div>
+          <input id={'exp-search-'+win.id} placeholder="Search files…" value={query} onChange={e=>setQuery(e.target.value)} style={{width:150,padding:'6px 9px',fontSize:11}}/>
+          <select value={sort} onChange={e=>setSort(e.target.value)} style={{padding:'6px 8px',fontSize:11}}><option value="name">Name</option><option value="date">Modified</option><option value="type">Type</option><option value="size">Size</option></select>
+          <button className="btn icon" title={view==='grid'?'List view':'Grid view'} onClick={()=>setView(view==='grid'?'list':'grid')}><Icon name={view==='grid'?'list':'grid'} size={14}/></button>
+          <button className="btn icon" title="Refresh" onClick={()=>{setQuery('');setSelected(null)}}><Icon name="refresh" size={14}/></button>
         </div>
-      </div>)
+        <div className="file-area">
+          {!inTrash&&!query&&<div className="row" style={{marginBottom:12}}>
+            <button className="btn" onClick={()=>setNewItem({type:'folder',name:'New Folder'})}><Icon name="folderPlus" size={14}/>New folder</button>
+            <button className="btn" onClick={()=>setNewItem({type:'text',name:'untitled.txt'})}><Icon name="fileText" size={14}/>New file</button>
+            <button className="btn" onClick={()=>setNewItem({type:'note',name:'Untitled note'})}><Icon name="notes" size={14}/>New note</button>
+            <button className="btn" onClick={()=>document.getElementById('global-file-input')?.click()}><Icon name="upload" size={14}/>Import</button>
+            {inTrash&&<button className="btn danger" onClick={()=>{if(confirm('Permanently delete everything in Trash?'))emptyTrash()}}>Empty</button>}
+          </div>}
+          {newItem&&<div className="inline-new"><Icon name={fileIcon({type:newItem.type})} size={16}/><input autoFocus value={newItem.name} onChange={e=>setNewItem({...newItem,name:e.target.value})} onKeyDown={e=>{if(e.key==='Enter')addItem();if(e.key==='Escape')setNewItem(null)}}/><button className="btn primary" onClick={addItem}>Create</button><button className="btn ghost" onClick={()=>setNewItem(null)}><Icon name="close" size={13}/></button></div>}
+          {items.length===0?<div className="empty"><div><div className="big"><Icon name={inTrash?'trash':'files'} size={28}/></div><div style={{fontWeight:700,color:'var(--text)'}}>{inTrash?'Trash is empty':'Nothing here yet'}</div><div className="tiny">Create a file or drop one onto the desktop</div></div></div>
+          :view==='grid'?<div className="file-grid">{items.map(f=><div key={f.id} className={'file-card '+(selected===f.id?'sel':'')} onClick={()=>setSelected(f.id)} onDoubleClick={()=>openItem(f)}>
+              {f.starred&&<span className="star"><Icon name="starFill" size={13}/></span>}
+              <div className="thumb">{f.type==='image'?<img src={f.content} alt=""/>:<Icon name={fileIcon(f)} size={28}/>}</div>
+              <div className="name">{f.name}</div><div className="tiny muted">{f.type}</div>
+            </div>)}</div>
+          :<div className="file-list">{items.map(f=><div key={f.id} className={'file-row '+(selected===f.id?'sel':'')} onClick={()=>setSelected(f.id)} onDoubleClick={()=>openItem(f)}>
+              <span className="fi"><Icon name={fileIcon(f)} size={17}/></span><span className="grow">{f.name}</span>
+              {f.starred&&<Icon name="starFill" size={12}/>}<span className="meta">{formatDate(f.modified)}</span><span className="tiny muted">{f.type}</span>
+            </div>)}</div>}
+        </div>
+        {selectedFile&&<div className="inspector">
+          <Icon name={fileIcon(selectedFile)} size={17}/><b className="tiny">{selectedFile.name}</b><span className="pill">{selectedFile.type}</span><span className="tiny muted">Modified {formatDate(selectedFile.modified)}</span>
+          <div className="grow"/>
+          {inTrash?<>
+            <button className="btn" onClick={()=>restoreFile(selectedFile.id)}><Icon name="reset" size={13}/>Restore</button>
+            <button className="btn danger" onClick={()=>purgeFile(selectedFile.id)}><Icon name="trash" size={13}/>Delete forever</button>
+          </>:<>
+            <button className="btn" onClick={()=>openItem(selectedFile)}><Icon name="eye" size={13}/>Open</button>
+            <button className="btn icon" title="Star" onClick={()=>updateFile(selectedFile.id,{starred:!selectedFile.starred})}>{selectedFile.starred?<Icon name="starFill" size={14}/>:<Icon name="star" size={14}/>}</button>
+            <button className="btn icon" title="Rename" onClick={()=>setRename(selectedFile.id)}><Icon name="edit" size={14}/></button>
+            {selectedFile.type!=='folder'&&<button className="btn icon" title="Download" onClick={()=>downloadFile(selectedFile)}><Icon name="download" size={14}/></button>}
+            <button className="btn danger icon" title="Trash" onClick={()=>deleteFile(selectedFile.id)}><Icon name="trash" size={14}/></button>
+          </>}
+        </div>}
+        {rename&&(()=>{const f=state.files.find(x=>x.id===rename);return f?<RenameDialog file={f} onClose={()=>setRename(null)}/>:null})()}
+      </main>
+    </div>;
+  }
+  function RenameDialog({file,onClose}){
+    const {updateFile}=useOS();const [v,setV]=useState(file.name);
+    return <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()} style={{paddingTop:'25vh'}}>
+      <div className="palette glass" style={{width:380,padding:16}}>
+        <div className="set-title">Rename item</div>
+        <input autoFocus value={v} onChange={e=>setV(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){updateFile(file.id,{name:v});onClose()}if(e.key==='Escape')onClose()}} style={{width:'100%',margin:'12px 0'}}/>
+        <div className="row"><button className="btn primary" onClick={()=>{updateFile(file.id,{name:v});onClose()}}>Save</button><button className="btn" onClick={onClose}>Cancel</button></div>
+      </div>
+    </div>;
+  }
+  /* ---------- Terminal ---------- */
+  function TerminalApp(){
+    const {state,createFile,updateFile,deleteFile,setSetting,openApp}=useOS();
+    const [lines,setLines]=useState([{t:'AETHER Shell 4.0 — type "help" to begin.',c:'term-dim'}]);
+    const [cmd,setCmd]=useState('');
+    const [history,setHistory]=useState([]);
+    const [hIdx,setHIdx]=useState(-1);
+    const bodyRef=useRef();
+    useEffect(()=>{if(bodyRef.current)bodyRef.current.scrollTop=bodyRef.current.scrollHeight},[lines]);
+    const out=(t,c='')=>setLines(l=>[...l,{t:String(t),c}]);
+    function run(raw){
+      const input=raw.trim();if(!input)return;
+      out('visitor@aether:~$ '+input,'term-prompt');
+      setHistory(h=>[input,...h]);setHIdx(-1);setCmd('');
+      const parts=input.split(/\s+/);const c=parts[0].toLowerCase();const arg=parts.slice(1).join(' ');
+      if(c==='help'){
+        out('Available commands:','term-ok');
+        out('help | ls [-l] | cat <file> | touch <file> | mkdir <dir> | rm <file> | mv <old> <new>');
+        out('star <file> | find <text> | open <app> | theme <dark|light|eclipse> | wall <name>');
+        out('echo <text> | date | whoami | clear | history | neofetch | export <file>');
+      }
+      else if(c==='ls'){
+        const list=state.files.filter(f=>!f.trashed);
+        if(parts[1]==='-l')list.forEach(f=>out((f.starred?'*':' ')+' '+f.type.padEnd(6)+' '+String((f.content||'').length).padStart(6)+'  '+f.name,'term-dim'));
+        else out(list.map(f=>f.name+(f.type==='folder'?'/':'')).join('   ')||'(empty)');
+      }
+      else if(c==='cat'){
+        const f=state.files.find(x=>x.name===arg||x.id===arg);
+        out(f?(f.type==='text'||f.type==='note'?f.content:'[binary: '+f.type+']'):'cat: no such file','term-err');
+      }
+      else if(c==='touch'||c==='mkdir'){
+        if(!arg)return out(c+': missing name','term-err');
+        createFile({name:arg,type:c==='mkdir'?'folder':'text',content:''});out('created '+arg,'term-ok');
+      }
+      else if(c==='rm'){
+        const f=state.files.find(x=>x.name===arg);
+        if(f){deleteFile(f.id);out('removed '+arg,'term-ok')}else out('rm: no such file','term-err');
+      }
+      else if(c==='mv'||c==='rename'){
+        const a=parts[1],b=parts[2];const f=state.files.find(x=>x.name===a);
+        if(f&&b){updateFile(f.id,{name:b});out(a+' -> '+b,'term-ok')}else out('mv: usage: mv <old> <new>','term-err');
+      }
+      else if(c==='star'){
+        const f=state.files.find(x=>x.name===arg);
+        if(f){updateFile(f.id,{starred:!f.starred});out((f.starred?'unstarred ':'starred ')+arg,'term-ok')}else out('not found','term-err');
+      }
+      else if(c==='find'){
+        const r=state.files.filter(f=>f.name.toLowerCase().includes((arg||'').toLowerCase()));
+        out(r.length?r.map(f=>f.name).join('\n'):'no matches');
+      }
+      else if(c==='open'){
+        const a=APPS.find(x=>x.id===arg||x.name.toLowerCase()===arg.toLowerCase());
+        if(a){openApp(a.id);out('launched '+a.name,'term-ok')}else out('unknown app: '+arg,'term-err');
+      }
+      else if(c==='theme'){
+        if(['dark','light','eclipse'].includes(arg)){setSetting({theme:arg});out('theme set to '+arg,'term-ok')}
+        else out('themes: dark, light, eclipse','term-warn');
+      }
+      else if(c==='wall'){
+        if(['nebula','aurora','sunset','ocean','mono'].includes(arg)){setSetting({wallpaper:arg,customWallpaper:null});out('wallpaper set to '+arg,'term-ok')}
+        else out('walls: nebula, aurora, sunset, ocean, mono','term-warn');
+      }
+      else if(c==='echo')out(arg);
+      else if(c==='date')out(new Date().toString());
+      else if(c==='whoami')out('visitor — trusted operator','term-ok');
+      else if(c==='history')out(history.map((h,i)=>(i+1)+'  '+h).join('\n'));
+      else if(c==='clear')setLines([]);
+      else if(c==='export'){
+        const f=state.files.find(x=>x.name===arg);
+        if(f){createFile({name:'export-'+Date.now()+'.txt',type:'text',content:JSON.stringify(f,null,2)});out('exported snapshot','term-ok')}else out('not found','term-err');
+      }
+      else if(c==='neofetch'){
+        out('      ▄▀▄   AETHER OS '+VERSION,'term-ok');out('     ▄█▀█▄  ─────────────');out('    ▄█▀ ▀█▄ Host: Browser Runtime');
+        out('    ▀█▄ ▄█▀ Shell: aether-sh 4.0');out('     ▀█▄█▀  DE: Aether Compositor');
+        out('      ▀▀   Files: '+state.files.length+'  Windows: '+state.windows.length);
+      }
+      else out('command not found: '+c+'. Try "help".','term-err');
     }
+    return <div className="terminal">
+      <div className="term-head"><span className="status-dot"/><span>aether-sh</span><span className="grow"/><span>{history.length} commands</span><button className="btn ghost icon" onClick={()=>setLines([])} title="Clear"><Icon name="trash" size={13}/></button></div>
+      <div className="term-body mono" ref={bodyRef} onClick={()=>document.getElementById('term-input')?.focus()}>
+        {lines.map((l,i)=><div key={i} className={'term-line '+l.c}>{l.t||'\u00a0'}</div>)}
+      </div>
+      <div className="term-input-row"><span className="term-path mono">visitor@aether:~$</span><input id="term-input" autoComplete="off" spellCheck="false" value={cmd} onChange={e=>setCmd(e.target.value)} onKeyDown={e=>{
+        if(e.key==='Enter')run(cmd);
+        else if(e.key==='ArrowUp'){e.preventDefault();const i=Math.min(hIdx+1,history.length-1);if(i>=0){setHIdx(i);setCmd(history[i])}}
+        else if(e.key==='ArrowDown'){e.preventDefault();const i=hIdx-1;setHIdx(i);setCmd(i>=0?history[i]:'')}
+        else if(e.key==='Tab'){e.preventDefault();const m=APPS.map(a=>a.id).find(x=>x.startsWith(cmd));if(m)setCmd(m)}
+      }}/></div>
+    </div>;
+  }
 
-    /* ----- Root app + global shortcuts ----- */
-    function App(){
-      return (
-        <OSProvider>
-          <OSInner />
-        </OSProvider>
-      )
+  /* ---------- Code editor ---------- */
+  function EditorApp({win}){
+    const {state,updateFile,notify,downloadFile}=useOS();
+    const file=state.files.find(f=>f.id===win.fileId);
+    const [content,setContent]=useState(file?.content||'');
+    const [wrap,setWrap]=useState(true);
+    const [font,setFont]=useState(12);
+    const [dirty,setDirty]=useState(false);
+    const [caret,setCaret]=useState({l:1,c:1});
+    const area=useRef();const gutter=useRef();
+    useEffect(()=>{setContent(file?.content||'');setDirty(false)},[win.fileId]);
+    const isTop=state.windows.filter(w=>!w.minimized).reduce((a,w)=>!a||w.z>a.z?w:a,null)?.id===win.id;
+    const save=useCallback(()=>{
+      if(!file)return notify('Nothing to save','Open a file first','save');
+      updateFile(file.id,{content});setDirty(false);notify('File saved',file.name,'save');
+    },[file,content]);
+    useEffect(()=>{
+      function key(e){if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'&&isTop){e.preventDefault();save()}}
+      window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);
+    },[save,isTop]);
+    function updateCaret(){
+      const p=area.current?.selectionStart||0;const before=content.slice(0,p).split('\n');
+      setCaret({l:before.length,c:before[before.length-1].length+1});
     }
+    function insertTab(e){
+      if(e.key!=='Tab')return;e.preventDefault();
+      const el=e.target,s=el.selectionStart,t=el.selectionEnd;
+      const next=content.slice(0,s)+'  '+content.slice(t);setContent(next);setDirty(true);
+      requestAnimationFrame(()=>{el.selectionStart=el.selectionEnd=s+2});
+    }
+    const lines=content.split('\n');
+    return <div className="editor">
+      <div className="tabs"><div className="tab active"><span className="dot"/>{file?file.name:'untitled'}</div><div className="grow"/><div className="row" style={{padding:'0 8px'}}>
+        <ToolButton icon="save" title="Save (Ctrl+S)" onClick={save}/>
+        <ToolButton icon="download" title="Download" onClick={()=>downloadFile({name:file?.name||'untitled.txt',type:'text',content})}/>
+        <ToolButton icon="list" title="Word wrap" active={wrap} onClick={()=>setWrap(!wrap)}/>
+        <button className="btn icon" title="Font size" onClick={()=>setFont(font>=18?10:font+2)}>{font}px</button>
+      </div></div>
+      <div className="editor-body">
+        <div className="gutter" ref={gutter}>{lines.map((_,i)=><div key={i}>{i+1}</div>)}</div>
+        <textarea ref={area} className={'editor-area '+(wrap?'wrap':'')} spellCheck="false" value={content} style={{fontSize:font}} onChange={e=>{setContent(e.target.value);setDirty(true);updateCaret()}} onKeyUp={updateCaret} onClick={updateCaret} onKeyDown={insertTab} onScroll={e=>{if(gutter.current)gutter.current.scrollTop=e.target.scrollTop}}/>
+      </div>
+      <div className="statusline"><span>{file?file.name:'untitled'}</span><span>{dirty?'● Unsaved':'✓ Saved'}</span><span className="grow"/><span>Ln {caret.l}, Col {caret.c}</span><span>{lines.length} lines</span><span>{content.length} chars</span><span>UTF-8</span></div>
+    </div>;
+  }
 
-    function OSInner(){
-      const {openWindow, state, closeWindow} = useOS(); const searchRef = useRef();
-      useEffect(()=>{
-        function onKey(e){
-          if((e.ctrlKey||e.metaKey) && e.key==='k'){ e.preventDefault();
-            openWindow({ id:uid('w'), app:'files', title:'Files', x:120, y:120, width:860, height:520 }); setTimeout(()=>{ const el = document.querySelector('.desktop input'); if(el) el.focus() }, 150);
-          }
-          if((e.ctrlKey||e.metaKey) && e.key==='n'){ e.preventDefault();
-            openWindow({ id:uid('w'), app:'files', title:'Files', x:120, y:120, width:860, height:520 }); setTimeout(()=>{ const el = document.querySelector('.desktop input'); if(el) el.focus() }, 150); const evt = new CustomEvent('create-untitled'); window.dispatchEvent(evt);
-          }
-          if(e.key==='Escape'){
-            if(state.windows && state.windows.length>0){
-              const top = state.windows.reduce((acc, cur)=> !acc || cur.z>acc.z ? cur : acc, null);
-              if(top) closeWindow(top.id);
-            }
+  /* ---------- Paint studio ---------- */
+  function PaintApp(){
+    const {createFile,notify}=useOS();
+    const canvas=useRef();const drawing=useRef(false);const startPt=useRef(null);const snaps=useRef([]);const snapIdx=useRef(-1);
+    const [tool,setTool]=useState('brush');const [color,setColor]=useState('#8b5cf6');const [size,setSize]=useState(5);
+    const [,force]=useState(0);
+    const colors=['#8b5cf6','#22d3ee','#fb7185','#fbbf24','#a3e635','#ffffff','#0f172a','#f472b6'];
+    useEffect(()=>{
+      const c=canvas.current;if(!c)return;
+      const rect=c.getBoundingClientRect();
+      const old=document.createElement('canvas');old.width=c.width;old.height=c.height;
+      if(old.width&&old.height)old.getContext('2d').drawImage(c,0,0);
+      c.width=Math.max(1,Math.floor(rect.width));c.height=Math.max(1,Math.floor(rect.height));
+      const ctx=c.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,c.width,c.height);
+      if(old.width&&old.height)ctx.drawImage(old,0,0);
+      if(snapIdx.current<0){snaps.current=[c.toDataURL()];snapIdx.current=0}
+    },[]);
+    function pt(e){const r=canvas.current.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
+    function snapshot(){
+      const d=canvas.current.toDataURL();
+      snaps.current=[...snaps.current.slice(0,snapIdx.current+1),d].slice(-30);
+      snapIdx.current=snaps.current.length-1;force(n=>n+1);
+    }
+    function restore(i){const img=new Image();img.onload=()=>canvas.current.getContext('2d').drawImage(img,0,0);img.src=snaps.current[i]}
+    function down(e){
+      e.currentTarget.setPointerCapture(e.pointerId);drawing.current=true;startPt.current=pt(e);
+      const ctx=canvas.current.getContext('2d');
+      ctx.strokeStyle=tool==='eraser'?'#ffffff':color;ctx.fillStyle=ctx.strokeStyle;
+      ctx.lineWidth=tool==='eraser'?size*3:size;ctx.lineCap='round';ctx.lineJoin='round';
+      ctx.beginPath();ctx.moveTo(startPt.current.x,startPt.current.y);
+      if(tool==='brush'||tool==='eraser'){ctx.lineTo(startPt.current.x+.1,startPt.current.y+.1);ctx.stroke()}
+    }
+    function move(e){
+      if(!drawing.current)return;
+      const p=pt(e);const ctx=canvas.current.getContext('2d');const s=startPt.current;
+      if(tool==='brush'||tool==='eraser'){ctx.lineTo(p.x,p.y);ctx.stroke();return}
+      if(tool==='line'){ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(p.x,p.y);ctx.stroke();return}
+      ctx.beginPath();
+      if(tool==='square')ctx.rect(s.x,s.y,p.x-s.x,p.y-s.y);
+      else if(tool==='circle')ctx.ellipse((s.x+p.x)/2,(s.y+p.y)/2,Math.abs(p.x-s.x)/2,Math.abs(p.y-s.y)/2,0,0,Math.PI*2);
+      ctx.stroke();
+    }
+    function up(){if(!drawing.current)return;drawing.current=false;snapshot()}
+    function clear(){const c=canvas.current;const ctx=c.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,c.width,c.height);snapshot()}
+    function save(){const d=canvas.current.toDataURL('image/png');const name='artwork-'+Date.now()+'.png';createFile({name,type:'image',content:d});notify('Artwork saved',name,'paint')}
+    return <div className="paint">
+      <div className="paint-tools">
+        {[['brush','paint','Brush'],['eraser','eraser','Eraser'],['line','line','Line'],['square','square','Rectangle'],['circle','circle','Ellipse']].map(([id,ico,label])=><button key={id} className={'tool '+(tool===id?'active':'')} title={label} onClick={()=>setTool(id)}><Icon name={ico} size={15}/></button>)}
+        <div className="dock-divider"/>
+        {colors.map(c=><button key={c} className={'swatch '+(color===c?'active':'')} style={{background:c}} onClick={()=>setColor(c)}/>)}
+        <input type="color" value={color} onChange={e=>setColor(e.target.value)} style={{width:30,height:26,padding:2}}/>
+        <input className="slider" type="range" min="1" max="32" value={size} onChange={e=>setSize(+e.target.value)} style={{width:80}}/>
+        <span className="tiny muted mono">{size}px</span>
+        <div className="grow"/>
+        <ToolButton icon="undo" title="Undo" disabled={snapIdx.current<=0} onClick={()=>{if(snapIdx.current>0){snapIdx.current--;restore(snapIdx.current);force(n=>n+1)}}}/>
+        <ToolButton icon="redo" title="Redo" disabled={snapIdx.current>=snaps.current.length-1} onClick={()=>{if(snapIdx.current<snaps.current.length-1){snapIdx.current++;restore(snapIdx.current);force(n=>n+1)}}}/>
+        <ToolButton icon="reset" title="Clear canvas" onClick={clear}/>
+        <button className="btn primary" onClick={save}><Icon name="save" size={13}/>Save to Files</button>
+      </div>
+      <div className="canvas-wrap"><canvas ref={canvas} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}/></div>
+    </div>;
+  }
+  /* ---------- Calculator ---------- */
+  function evalSafe(s){
+    if(!s)return null;
+    const clean=s.replace(/÷/g,'/').replace(/×/g,'*').replace(/−/g,'-');
+    if(!/^[0-9+\-*/().\s]+$/.test(clean))return null;
+    try{const v=Function('"use strict";return ('+clean+')')();return typeof v==='number'&&isFinite(v)?Math.round(v*1e10)/1e10:null}catch(e){return null}
+  }
+  function CalculatorApp(){
+    const [expr,setExpr]=useState('');const [value,setValue]=useState('0');
+    const keys=['C','(',')','÷','7','8','9','×','4','5','6','−','1','2','3','+','0','.','⌫','='];
+    function calc(e){
+      if(e==='C'){setExpr('');setValue('0');return}
+      if(e==='⌫'){const n=expr.slice(0,-1);setExpr(n);const v=evalSafe(n);if(v!==null)setValue(String(v));return}
+      if(e==='='){const n=evalSafe(expr);if(n!==null){setValue(String(n));setExpr(String(n))}else setValue('Error');return}
+      const map={'÷':'/','×':'*','−':'-'};
+      const n=expr+(map[e]||e);setExpr(n);
+      const v=evalSafe(n);if(v!==null)setValue(String(v));
+    }
+    useEffect(()=>{
+      function key(e){
+        if(/[0-9+\-*/().]/.test(e.key)&&e.key.length===1)calc(e.key);
+        else if(e.key==='Enter'||e.key==='=')calc('=');
+        else if(e.key==='Backspace')calc('⌫');
+        else if(e.key==='Escape')calc('C');
+      }
+      window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);
+    });
+    return <div className="calc">
+      <div className="calc-display"><div className="expr">{expr||'\u00a0'}</div><div className="val">{value}</div></div>
+      <div className="calc-grid">{keys.map(k=><button key={k} className={'calc-key '+(['÷','×','−','+','='].includes(k)?'op ':'')+(k==='='?'eq':'')} onClick={()=>calc(k)}>{k}</button>)}</div>
+    </div>;
+  }
+
+  /* ---------- Notes ---------- */
+  function NotesApp({win}){
+    const {state,createFile,updateFile,deleteFile}=useOS();
+    const notes=state.files.filter(f=>f.type==='note'&&!f.trashed);
+    const [active,setActive]=useState(win.fileId&&notes.find(n=>n.id===win.fileId)?win.fileId:notes[0]?.id||null);
+    const note=notes.find(n=>n.id===active);
+    function add(){const id=uid('f');createFile({id,name:'Untitled note',type:'note',content:'',color:'#8b5cf6'});setActive(id)}
+    return <div className="notes">
+      <aside className="notes-list">
+        <button className="btn primary" style={{width:'100%',marginBottom:10}} onClick={add}><Icon name="plus" size={14}/>New note</button>
+        {notes.map(n=><div key={n.id} className={'note-item '+(active===n.id?'active':'')} onClick={()=>setActive(n.id)}>
+          <div className="row"><span style={{width:8,height:8,borderRadius:'50%',background:n.color||'#8b5cf6'}}/><div className="nt">{n.name}</div></div>
+          <div className="nb">{n.content||'Empty note'}</div>
+        </div>)}
+        {!notes.length&&<div className="tiny muted" style={{padding:10}}>No notes yet.</div>}
+      </aside>
+      <div className="note-main">
+        {note?<>
+          <div className="row"><input className="title grow" value={note.name} onChange={e=>updateFile(note.id,{name:e.target.value})}/><button className="btn danger icon" title="Delete note" onClick={()=>{deleteFile(note.id);setActive(null)}}><Icon name="trash" size={14}/></button></div>
+          <div className="color-row">{['#8b5cf6','#22d3ee','#fb7185','#fbbf24','#a3e635','#f472b6'].map(c=><button key={c} className={'swatch '+(note.color===c?'active':'')} style={{background:c,width:24,height:24}} onClick={()=>updateFile(note.id,{color:c})}/>)}</div>
+          <textarea className="mono" value={note.content} placeholder="Start writing…" onChange={e=>updateFile(note.id,{content:e.target.value})}/>
+          <div className="statusline" style={{margin:'0 -12px -12px'}}><span>Auto-saved</span><span className="grow"/><span>{note.content.length} chars</span></div>
+        </>:<div className="empty"><div><div className="big"><Icon name="notes" size={28}/></div><div style={{fontWeight:700,color:'var(--text)'}}>No note selected</div><button className="btn primary" style={{marginTop:12}} onClick={add}>Create one</button></div></div>}
+      </div>
+    </div>;
+  }
+
+  /* ---------- System monitor ---------- */
+  function MonitorApp(){
+    const {state}=useOS();
+    const rand=(a,b)=>a+Math.random()*(b-a);
+    const [cpu,setCpu]=useState(()=>Array.from({length:40},()=>rand(20,45)));
+    const [mem,setMem]=useState(()=>Array.from({length:40},()=>rand(45,57)));
+    const [net,setNet]=useState(()=>Array.from({length:40},()=>rand(0,40)));
+    const [tick,setTick]=useState(Date.now());
+    useEffect(()=>{
+      const t=setInterval(()=>{
+        setCpu(a=>[...a.slice(1),Math.max(6,Math.min(94,a[a.length-1]+(Math.random()-.5)*26))]);
+        setMem(a=>[...a.slice(1),Math.max(35,Math.min(88,a[a.length-1]+(Math.random()-.5)*5))]);
+        setNet(a=>[...a.slice(1),Math.max(0,Math.min(100,a[a.length-1]+(Math.random()-.5)*45))]);
+        setTick(Date.now());
+      },900);
+      return()=>clearInterval(t);
+    },[]);
+    const last=a=>a[a.length-1];
+    const active=state.windows.filter(w=>!w.minimized);
+    const procs=[...active.map(w=>({name:appById(w.app).name,icon:appById(w.app).icon,cpu:rand(4,26)})),
+      {name:'aether-compositor',icon:'grid',cpu:rand(6,14)},{name:'storage-daemon',icon:'files',cpu:rand(2,7)},{name:'kernel',icon:'cpu',cpu:rand(1,5)}];
+    return <div className="monitor">
+      <div className="stat-grid">
+        <div className="stat-card"><div className="widget-title">Processor</div><div className="v">{last(cpu).toFixed(0)}%</div><Sparkline data={cpu}/><div className="metric"><span>8 virtual cores</span><b>{last(cpu).toFixed(1)}%</b></div></div>
+        <div className="stat-card"><div className="widget-title">Memory</div><div className="v">{last(mem).toFixed(0)}%</div><Sparkline data={mem} color="#34d399"/><div className="metric"><span>{(last(mem)*0.16).toFixed(1)} / 16 GB</span><b>{last(mem).toFixed(1)}%</b></div></div>
+        <div className="stat-card"><div className="widget-title">Network</div><div className="v">{last(net).toFixed(0)}</div><Sparkline data={net} color="#fb7185"/><div className="metric"><span>Mb/s</span><b>{last(net).toFixed(0)}</b></div></div>
+      </div>
+      <div className="panel" style={{padding:14}}>
+        <div className="widget-title">Processes <span className="muted" style={{float:'right'}}>{procs.length} running</span></div>
+        {procs.map((p,i)=><div key={i} className="proc"><Icon name={p.icon} size={14}/><span style={{width:150}}>{p.name}</span><div className="bar"><i style={{width:p.cpu+'%'}}/></div><span className="mono tiny">{p.cpu.toFixed(1)}%</span></div>)}
+      </div>
+      <div className="panel" style={{padding:14}}>
+        <div className="widget-title">Session</div>
+        <div className="row" style={{justifyContent:'space-between'}}><span className="tiny muted">Uptime</span><span className="mono tiny">{Math.max(0,Math.floor((tick-(window.__aetherBoot||tick))/1000))}s</span></div>
+        <div className="row" style={{justifyContent:'space-between'}}><span className="tiny muted">Storage objects</span><span className="mono tiny">{state.files.length}</span></div>
+        <div className="row" style={{justifyContent:'space-between'}}><span className="tiny muted">Render engine</span><span className="mono tiny">React 18 / Babel</span></div>
+      </div>
+    </div>;
+  }
+
+  /* ---------- Gallery & media viewer ---------- */
+  function GalleryApp({win}){
+    const {state,downloadFile}=useOS();
+    const images=state.files.filter(f=>f.type==='image'&&!f.trashed);
+    const [active,setActive]=useState(win.fileId||null);
+    const idx=images.findIndex(i=>i.id===active);
+    const current=idx>=0?images[idx]:null;
+    return <div className="gallery">
+      <div className="explorer-head"><div className="row"><Icon name="gallery" size={16}/><b style={{fontSize:12}}>{images.length} images</b></div><div className="grow"/><span className="tiny muted hide-sm">Locally stored visual library</span></div>
+      <div className="gallery-grid">{images.map(f=><div key={f.id} className="gal-card" onClick={()=>setActive(f.id)}><img src={f.content} alt={f.name}/><div className="cap">{f.name}</div></div>)}
+        {!images.length&&<div className="empty" style={{gridColumn:'1/-1'}}><div><div className="big"><Icon name="image" size={28}/></div><div style={{fontWeight:700,color:'var(--text)'}}>No images</div><div className="tiny">Import or paint something</div></div></div>}
+      </div>
+      {current&&<div className="lightbox">
+        <img src={current.content} alt={current.name}/>
+        <div className="row"><button className="btn" onClick={()=>setActive(images[(idx-1+images.length)%images.length].id)}><Icon name="left" size={14}/>Prev</button><b className="display">{current.name}</b><button className="btn" onClick={()=>setActive(images[(idx+1)%images.length].id)}>Next<Icon name="right" size={14}/></button><button className="btn icon" title="Download" onClick={()=>downloadFile(current)}><Icon name="download" size={14}/></button><button className="btn icon" title="Close" onClick={()=>setActive(null)}><Icon name="close" size={14}/></button></div>
+      </div>}
+    </div>;
+  }
+  function ViewerApp({win}){
+    const f=useOS().state.files.find(x=>x.id===win.fileId);
+    if(!f)return <div className="empty">File not found</div>;
+    return <div style={{padding:16,height:'100%',display:'flex',flexDirection:'column',gap:12,overflow:'auto'}}>
+      <div className="row"><Icon name={fileIcon(f)} size={18}/><b style={{fontSize:13}}>{f.name}</b><span className="pill">{f.type}</span></div>
+      <div className="grow" style={{display:'grid',placeItems:'center',background:'var(--panel)',borderRadius:12}}>
+        {f.type==='audio'?<audio controls src={f.content} style={{width:'90%'}}/>:f.type==='video'?<video controls src={f.content} style={{maxWidth:'100%',maxHeight:'100%'}}/>:<pre className="mono tiny" style={{whiteSpace:'pre-wrap'}}>{f.content}</pre>}
+      </div>
+    </div>;
+  }
+
+  /* ---------- Settings ---------- */
+  function SettingsApp(){
+    const {state,setSetting,notify,replaceState}=useOS();const s=state.settings;
+    const [confirmReset,setConfirmReset]=useState(false);
+    const [custom,setCustom]=useState(s.customWallpaper||'');
+    const fileInput=useRef();
+    const themes=[['dark','#0b1020','Dark'],['light','#f1f4ff','Light'],['eclipse','#050b07','Eclipse']];
+    const accents=[['violet','#8b5cf6'],['cyan','#22d3ee'],['rose','#fb7185'],['lime','#a3e635'],['amber','#fbbf24'],['blue','#60a5fa']];
+    const walls=[['nebula','linear-gradient(135deg,#4c1d95,#0e7490,#db2777)'],['aurora','linear-gradient(135deg,#065f46,#1d4ed8,#7c3aed)'],['sunset','linear-gradient(135deg,#f97316,#be123c,#6d28d9)'],['ocean','linear-gradient(135deg,#0e7490,#1e3a8a,#0f766e)'],['mono','linear-gradient(135deg,#334155,#1e293b,#475569)']];
+    function exportConfig(){
+      const blob=new Blob([JSON.stringify({...state,notifications:[]},null,2)],{type:'application/json'});
+      const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='aether-os-backup.json';a.click();URL.revokeObjectURL(url);
+      notify('Backup exported','aether-os-backup.json','download');
+    }
+    async function importConfig(e){
+      const file=e.target.files[0];if(!file)return;
+      try{const data=JSON.parse(await readFileAsText(file));replaceState({...data,notifications:[]});notify('Backup restored',file.name,'check')}
+      catch(err){notify('Import failed','Invalid backup file','close')}
+      e.target.value='';
+    }
+    return <div className="settings">
+      <div className="set-section">
+        <div className="set-title">Appearance</div>
+        <div className="theme-cards">{themes.map(([id,bg,label])=><button key={id} className={'theme-card '+(s.theme===id?'active':'')} onClick={()=>setSetting({theme:id})}><div className="theme-swatch" style={{background:bg,border:'1px solid var(--stroke)'}}/>{label}</button>)}</div>
+        <div className="tiny muted">Accent color</div>
+        <div className="accent-row">{accents.map(([id,c])=><button key={id} className={'accent-dot '+(s.accent===id?'active':'')} style={{background:c}} onClick={()=>setSetting({accent:id})} title={id}/>)}</div>
+      </div>
+      <div className="set-section">
+        <div className="set-title">Wallpaper</div>
+        <div className="wall-cards">{walls.map(([id,bg])=><button key={id} className={'wall-card '+(s.wallpaper===id&&!s.customWallpaper?'active':'')} style={{background:bg}} onClick={()=>setSetting({wallpaper:id,customWallpaper:null})}><span>{id}</span></button>)}</div>
+        <div className="row"><input className="grow" placeholder="Custom image URL or data URL" value={custom} onChange={e=>setCustom(e.target.value)}/><button className="btn primary" onClick={()=>{if(custom.trim()){setSetting({customWallpaper:custom.trim()});notify('Wallpaper applied','Custom image','image')}}}>Apply</button>{s.customWallpaper&&<button className="btn" onClick={()=>{setCustom('');setSetting({customWallpaper:null})}}>Reset</button>}</div>
+      </div>
+      <div className="set-section">
+        <div className="set-title">Interface</div>
+        <Toggle label="Animations" desc="Window and UI motion" checked={s.animations} onChange={v=>setSetting({animations:v})}/>
+        <Toggle label="Desktop icons" desc="Show shortcut icons on desktop" checked={s.showIcons} onChange={v=>setSetting({showIcons:v})}/>
+        <Toggle label="Backdrop blur" desc="Glass surfaces and translucency" checked={s.blur} onChange={v=>setSetting({blur:v})}/>
+        <div className="set-row"><div><div style={{fontSize:12,fontWeight:600}}>Wallpaper brightness</div><div className="tiny muted">Currently {s.brightness}%</div></div><input className="slider" style={{width:140}} type="range" min="40" max="140" value={s.brightness} onChange={e=>setSetting({brightness:+e.target.value})}/></div>
+      </div>
+      <div className="set-section">
+        <div className="set-title">Data</div>
+        <div className="row"><button className="btn" onClick={exportConfig}><Icon name="download" size={14}/>Export backup</button><button className="btn" onClick={()=>fileInput.current?.click()}><Icon name="upload" size={14}/>Import backup</button><input ref={fileInput} type="file" accept="application/json" style={{display:'none'}} onChange={importConfig}/></div>
+        {confirmReset?<div className="panel" style={{padding:12}}><div className="tiny" style={{marginBottom:10}}>This will erase all files, notes, and preferences. Continue?</div><div className="row"><button className="btn danger" onClick={()=>{replaceState(defaultState());setConfirmReset(false);notify('System reset','Fresh workspace ready','reset')}}>Yes, reset everything</button><button className="btn" onClick={()=>setConfirmReset(false)}>Cancel</button></div></div>
+        :<button className="btn danger" onClick={()=>setConfirmReset(true)}><Icon name="reset" size={14}/>Reset system</button>}
+      </div>
+    </div>;
+  }
+
+  /* ---------- About ---------- */
+  function AboutApp(){
+    const {state}=useOS();
+    return <div className="about">
+      <div className="about-hero"><Icon name="sparkles" size={38}/></div>
+      <div><h1>AETHER OS</h1><div className="badge">Build {VERSION}</div></div>
+      <p className="muted tiny" style={{maxWidth:340,lineHeight:1.7}}>A desktop environment that lives in one HTML file. No build step, no server, no compromises — just React, CSS, and your browser.</p>
+      <div className="panel" style={{padding:14,width:'100%'}}>
+        <div className="spec"><span>Release</span><span className="mono">{VERSION} / stable</span></div>
+        <div className="spec"><span>Kernel</span><span className="mono">Browser Runtime</span></div>
+        <div className="spec"><span>Compositor</span><span className="mono">Aether WM</span></div>
+        <div className="spec"><span>Files</span><span className="mono">{state.files.length} objects</span></div>
+        <div className="spec"><span>Display</span><span className="mono">{window.innerWidth} × {window.innerHeight}</span></div>
+        <div className="spec"><span>Security</span><span className="mono">Local-first</span></div>
+      </div>
+      <div className="row"><span className="pill"><Icon name="shield" size={12}/>Local storage</span><span className="pill"><Icon name="globe" size={12}/>Offline-ready</span></div>
+      <div className="tiny muted">Crafted for the browser. Made to feel like a machine.</div>
+    </div>;
+  }
+  /* ---------- App renderer ---------- */
+  const APP_VIEWS={explorer:ExplorerApp,terminal:TerminalApp,editor:EditorApp,paint:PaintApp,gallery:GalleryApp,notes:NotesApp,calc:CalculatorApp,monitor:MonitorApp,settings:SettingsApp,about:AboutApp,viewer:ViewerApp};
+  function AppView({win}){
+    const C=APP_VIEWS[win.app]||AboutApp;
+    return <C win={win}/>;
+  }
+  function WindowShell(){
+    const {state}=useOS();
+    return <>{state.windows.map(w=><WindowFrame key={w.id} win={w}><AppView win={w}/></WindowFrame>)}</>;
+  }
+
+  /* ---------- Desktop shell ---------- */
+  function Desktop({onOpenPalette,onLock}){
+    const {state,openApp,openFile,setSetting,notify,importFiles,focusWindow,clearNotifications}=useOS();
+    const [clock,setClock]=useState(new Date());
+    const [panel,setPanel]=useState(null);
+    const [context,setContext]=useState(null);
+    const [dropActive,setDropActive]=useState(false);
+    const [selectedIcon,setSelectedIcon]=useState(null);
+    const [dragIcon,setDragIcon]=useState(null);
+    const iconGesture=useRef(null);
+    const s=state.settings;
+
+    useEffect(()=>{const t=setInterval(()=>setClock(new Date()),1000);return()=>clearInterval(t)},[]);
+    useEffect(()=>{
+      function close(){setContext(null)}
+      function drop(e){e.preventDefault();setDropActive(false);if(e.dataTransfer?.files?.length)importFiles(e.dataTransfer.files)}
+      function over(e){e.preventDefault();if(e.dataTransfer?.types?.includes('Files'))setDropActive(true)}
+      function leave(e){if(!e.relatedTarget)setDropActive(false)}
+      window.addEventListener('click',close);window.addEventListener('drop',drop);
+      window.addEventListener('dragover',over);window.addEventListener('dragend',leave);
+      return()=>{window.removeEventListener('click',close);window.removeEventListener('drop',drop);window.removeEventListener('dragover',over);window.removeEventListener('dragend',leave)};
+    },[importFiles]);
+    useEffect(()=>{
+      function move(e){
+        const g=iconGesture.current;if(!g)return;
+        if(Math.abs(e.clientX-g.sx)+Math.abs(e.clientY-g.sy)>5)g.moved=true;
+        if(!g.moved)return;
+        setDragIcon(g.id);
+        setSetting({iconPositions:{...s.iconPositions,[g.id]:{x:Math.max(4,e.clientX-45),y:Math.max(4,e.clientY-30)}}});
+      }
+      function up(){if(iconGesture.current?.moved)setDragIcon(null);iconGesture.current=null}
+      window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);
+      return()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up)};
+    },[s.iconPositions]);
+
+    const time=clock.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    const fullTime=clock.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const date=clock.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+    const seconds=clock.getSeconds(),minutes=clock.getMinutes(),hours=clock.getHours()%12;
+
+    function openCtx(e){
+      e.preventDefault();
+      setContext({x:Math.min(e.clientX,window.innerWidth-235),y:Math.min(e.clientY,window.innerHeight-300)});
+    }
+    const ctxItems=[
+      {icon:'files',label:'Open Explorer',run:()=>openApp('explorer')},
+      {icon:'terminal',label:'Open Terminal',run:()=>openApp('terminal')},
+      {icon:'notes',label:'New note',run:()=>{const id=uid('f');notify('Note created','Use Notes to edit it','notes');openApp('notes',{fileId:id})}},
+      {sep:true},
+      {icon:'upload',label:'Import files',run:()=>document.getElementById('global-file-input')?.click()},
+      {icon:'image',label:'Change wallpaper',run:()=>openApp('settings')},
+      {icon:'search',label:'Command palette',run:onOpenPalette},
+      {sep:true},
+      {icon:'lock',label:'Lock system',run:onLock},
+      {icon:'power',label:'About this system',run:()=>openApp('about')}
+    ];
+    const running=state.windows.filter(w=>w.app!=='viewer');
+    const dockApps=state.favorites.map(appById);
+
+    return <div className={'desktop '+(s.blur?'':'no-blur')} onContextMenu={openCtx}>
+      <div className={'wallpaper wall-'+(s.wallpaper||'nebula')} style={{filter:`brightness(${s.brightness||100}%)`}}>
+        {s.customWallpaper&&<div className="wall-custom" style={{backgroundImage:`url("${s.customWallpaper}")`}}/>}
+        <div className="wall-grid"/><div className="wall-glow"/><div className="wall-scan"/>
+      </div>
+
+      <header className="topbar">
+        <div className="brand"><span className="brand-mark"><Icon name="bolt" size={13}/></span>AETHER<span className="muted" style={{letterSpacing:0}}>OS</span></div>
+        <button className="topbar-btn" onClick={()=>setPanel(panel==='menu'?null:'menu')}><Icon name="menu" size={14}/>Activities</button>
+        <button className="topbar-btn hide-sm" onClick={()=>openApp('explorer')}><Icon name="files" size={14}/>Files</button>
+        <div className="topbar-center"><span className="status-dot"/><span className="display">{date}</span><span style={{color:'var(--muted)'}}>{fullTime}</span></div>
+        <div className="topbar-right">
+          <button className="topbar-btn" title="Command palette" onClick={onOpenPalette}><Icon name="search" size={14}/></button>
+          <button className="topbar-btn" title="Notifications" onClick={()=>setPanel(panel==='notif'?null:'notif')}><Icon name="bell" size={14}/>{state.notifications.length>0&&<span className="status-dot"/>}</button>
+          <button className="topbar-btn" title="Quick settings" onClick={()=>setPanel(panel==='quick'?null:'quick')}><Icon name="wifi" size={14}/><Icon name="battery" size={14}/></button>
+          <button className="topbar-btn" title="Lock" onClick={onLock}><Icon name="power" size={14}/></button>
+        </div>
+      </header>
+
+      {panel==='menu'&&<div className="popover left glass">
+        <div className="widget-title">Applications</div>
+        <div className="row" style={{flexWrap:'wrap',gap:6}}>{APPS.map(a=><button key={a.id} className="btn" onClick={()=>{openApp(a.id);setPanel(null)}}><Icon name={a.icon} size={14}/>{a.name}</button>)}</div>
+        <div className="sep"/><div className="row"><span className="tiny muted">{VERSION}</span><span className="grow"/><button className="btn" onClick={()=>{openApp('about');setPanel(null)}}><Icon name="info" size={13}/>System info</button></div>
+      </div>}
+
+      {panel==='quick'&&<div className="popover right glass">
+        <div className="row"><b style={{fontSize:12}}>Quick settings</b><span className="grow"/><span className="badge">{time}</span></div>
+        <div className="quick-grid">
+          <button className="quick-tile active"><Icon name="wifi" size={16}/>Wi-Fi</button>
+          <button className="quick-tile active"><Icon name="volume" size={16}/>Sound</button>
+          <button className={'quick-tile '+(s.blur?'active':'')} onClick={()=>setSetting({blur:!s.blur})}><Icon name="sparkles" size={16}/>Glass</button>
+          <button className="quick-tile" onClick={()=>{onLock();setPanel(null)}}><Icon name="lock" size={16}/>Lock</button>
+        </div>
+        <label>Brightness</label>
+        <input className="slider" type="range" min="40" max="140" value={s.brightness} onChange={e=>setSetting({brightness:+e.target.value})}/>
+        <div className="sep"/>
+        <div className="row"><button className="btn grow" onClick={()=>setSetting({theme:s.theme==='dark'?'light':'dark'})}><Icon name={s.theme==='dark'?'sun':'moon'} size={14}/>Toggle theme</button><button className="btn" onClick={()=>{openApp('settings');setPanel(null)}}><Icon name="settings" size={14}/></button></div>
+      </div>}
+
+      {panel==='notif'&&<div className="popover right glass" style={{width:340,maxHeight:'60vh',overflow:'auto'}}>
+        <div className="row"><b style={{fontSize:12}}>Notifications</b><span className="grow"/><button className="btn ghost" onClick={clearNotifications}>Clear all</button></div>
+        <div className="sep"/>
+        {state.notifications.length?state.notifications.slice().reverse().map(n=><div key={n.id} className="notif-item"><div className="notif-icon"><Icon name={n.icon||'sparkles'} size={15}/></div><div><b style={{fontSize:12}}>{n.title}</b><div className="tiny muted">{n.body}</div></div></div>):<div className="empty" style={{minHeight:120}}><div><Icon name="bell" size={22}/><div className="tiny">All clear</div></div></div>}
+      </div>}
+
+      {s.showIcons&&<div className="desk-icons">
+        {dockApps.map((a,i)=>{
+          const pos=s.iconPositions[a.id]||{x:8+i*92,y:0};
+          return <div key={a.id} className={'desk-icon '+(selectedIcon===a.id?'selected ':'')+(dragIcon===a.id?'selected':'')}
+            style={{left:pos.x,top:pos.y}} onPointerDown={e=>{setSelectedIcon(a.id);iconGesture.current={id:a.id,sx:e.clientX,sy:e.clientY,moved:false}}}
+            onDoubleClick={()=>openApp(a.id)}>
+            <div className="ico"><Icon name={a.icon} size={24}/></div><div className="lbl">{a.name}</div>
+          </div>;
+        })}
+      </div>}
+
+      {!context&&<div className="widget-stack">
+        <div className="widget glass">
+          <div className="widget-title">Chronometer</div>
+          <div className="clock-face">
+            {Array.from({length:12},(_,i)=><span key={i} className="tick" style={{transform:`rotate(${i*30}deg)`}}/>)}
+            <div className="hand h" style={{transform:`rotate(${hours*30+minutes*.5}deg)`}}/>
+            <div className="hand m" style={{transform:`rotate(${minutes*6}deg)`}}/>
+            <div className="hand s" style={{transform:`rotate(${seconds*6}deg)`}}/>
+            <div className="clock-center"/>
+          </div>
+          <div style={{textAlign:'center'}}><div className="display" style={{fontSize:17,fontWeight:700}}>{time}</div><div className="tiny muted">{date}</div></div>
+        </div>
+        <div className="widget glass">
+          <div className="widget-title">System pulse</div>
+          <Sparkline data={Array.from({length:24},(_,i)=>25+Math.sin(i/3+Date.now()/9000)*15+Math.random()*14)}/>
+          <div className="metric"><span>CPU load</span><b>{Math.round(18+Math.random()*22)}%</b></div>
+          <div className="metric"><span>Memory</span><b>{Math.round(42+Math.random()*8)}%</b></div>
+        </div>
+        <div className="widget glass">
+          <div className="widget-title">Session</div>
+          <div className="row"><span className="status-dot"/><span className="tiny">All systems operational</span></div>
+          <div className="tiny muted" style={{marginTop:8}}>{state.files.length} files · {state.windows.length} windows</div>
+        </div>
+      </div>}
+
+      <WindowShell/>
+
+      {dropActive&&<div className="drop-overlay"><div style={{textAlign:'center'}}><Icon name="upload" size={48}/><div className="display" style={{fontSize:20,marginTop:12}}>Drop to import</div><div className="muted tiny">Files are stored locally in your browser</div></div></div>}
+
+      <nav className="dock glass">
+        <button className="dock-app" data-tip="Activities" onClick={()=>setPanel(panel==='menu'?null:'menu')}><Icon name="grid" size={20}/></button>
+        {dockApps.map(a=><button key={a.id} className={'dock-app '+(running.some(w=>w.app===a.id)?'active':'')} data-tip={a.name} onClick={()=>{
+          const w=running.find(x=>x.app===a.id);
+          if(w)focusWindow(w.id);else openApp(a.id);
+        }}><Icon name={a.icon} size={20}/>{running.some(w=>w.app===a.id)&&<span className="run-dot"/>}</button>)}
+        <div className="dock-divider"/>
+        {running.filter(w=>!dockApps.some(a=>a.id===w.app)).slice(0,5).map(w=><button key={w.id} className="dock-app active" data-tip={w.title} onClick={()=>focusWindow(w.id)}><Icon name={appById(w.app).icon} size={19}/><span className="run-dot"/></button>)}
+        <div className="dock-clock"><div>{time}</div><div className="tiny">{date}</div></div>
+      </nav>
+
+      <div className="toast-stack">{state.notifications.slice(-4).reverse().map(n=><div key={n.id} className="toast glass"><div className="notif-icon"><Icon name={n.icon||'sparkles'} size={15}/></div><div className="grow"><b style={{fontSize:12}}>{n.title}</b><div className="tiny muted">{n.body}</div></div></div>)}</div>
+
+      {context&&<div className="context-menu glass" style={{left:context.x,top:context.y}} onClick={e=>e.stopPropagation()}>
+        {ctxItems.map((it,i)=>it.sep?<div key={i} className="ctx-sep"/>:<div key={i} className="ctx-item" onClick={()=>{it.run();setContext(null)}}><Icon name={it.icon} size={14}/>{it.label}</div>)}
+      </div>}
+
+      <input id="global-file-input" type="file" multiple style={{display:'none'}} onChange={e=>{importFiles(e.target.files);e.target.value=''}}/>
+      <input id="global-wall-input" type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{const f=e.target.files[0];if(f){const d=await readFileAsDataURL(f);setSetting({customWallpaper:d});notify('Wallpaper applied',f.name,'image')}e.target.value=''}}/>
+    </div>;
+  }
+
+  /* ---------- Command palette ---------- */
+  function CommandPalette({onClose}){
+    const {state,openApp,openFile,createFile,setSetting,emptyTrash,notify,closeWindow}=useOS();
+    const [q,setQ]=useState('');const [sel,setSel]=useState(0);
+    const entries=useMemo(()=>{
+      const list=[];
+      APPS.forEach(a=>list.push({key:'app-'+a.id,group:'Applications',label:a.name,sub:a.id,icon:a.icon,run:()=>openApp(a.id)}));
+      state.files.filter(f=>!f.trashed).forEach(f=>list.push({key:'file-'+f.id,group:'Files',label:f.name,sub:f.type,icon:fileIcon(f),run:()=>openFile(f)}));
+      list.push(
+        {key:'act-theme',group:'Actions',label:'Toggle color theme',sub:'dark / light / eclipse',icon:'moon',run:()=>setSetting({theme:state.settings.theme==='dark'?'light':state.settings.theme==='light'?'eclipse':'dark'})},
+        {key:'act-note',group:'Actions',label:'Create new note',sub:'Ctrl+N',icon:'notes',run:()=>openApp('notes')},
+        {key:'act-wall',group:'Actions',label:'Change wallpaper',sub:'Appearance',icon:'image',run:()=>openApp('settings')},
+        {key:'act-trash',group:'Actions',label:'Empty trash',sub:'Destructive',icon:'trash',run:()=>emptyTrash()},
+        {key:'act-close',group:'Actions',label:'Close top window',sub:'Ctrl+W',icon:'close',run:()=>{const w=state.windows.filter(x=>!x.minimized).reduce((a,x)=>!a||x.z>a.z?x:a,null);if(w)closeWindow(w.id)}},
+        {key:'act-reset',group:'Actions',label:'Close all windows',sub:'Clean desktop',icon:'grid',run:()=>state.windows.forEach(w=>closeWindow(w.id))}
+      );
+      return list;
+    },[state.files,state.windows,state.settings]);
+    const filtered=entries.filter(e=>(e.label+' '+e.sub).toLowerCase().includes(q.toLowerCase())).slice(0,40);
+    useEffect(()=>setSel(0),[q]);
+    function choose(e){e?.run();onClose()}
+    return <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="palette glass">
+        <div className="palette-input"><Icon name="search" size={19}/><input autoFocus placeholder="Search apps, files, actions…" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{
+          if(e.key==='ArrowDown'){e.preventDefault();setSel(Math.min(sel+1,filtered.length-1))}
+          if(e.key==='ArrowUp'){e.preventDefault();setSel(Math.max(sel-1,0))}
+          if(e.key==='Enter'){e.preventDefault();choose(filtered[sel])}
+          if(e.key==='Escape')onClose();
+        }}/><span className="kbd">ESC</span></div>
+        <div className="palette-list">
+          {filtered.map((e,i)=><div key={e.key}>
+            {(i===0||filtered[i-1].group!==e.group)&&<div className="palette-group">{e.group}</div>}
+            <div className={'palette-item '+(sel===i?'sel':'')} onMouseEnter={()=>setSel(i)} onClick={()=>choose(e)}>
+              <span className="pi-ico"><Icon name={e.icon} size={16}/></span><span className="grow"><b style={{fontSize:13}}>{e.label}</b><span className="tiny muted" style={{display:'block'}}>{e.sub}</span></span>{sel===i&&<span className="kbd">↵</span>}
+            </div>
+          </div>)}
+          {!filtered.length&&<div className="empty"><div><Icon name="search" size={24}/><div className="tiny">No results for “{q}”</div></div></div>}
+        </div>
+        <div className="row" style={{padding:'9px 16px',borderTop:'1px solid var(--stroke)'}}><span className="kbd">↑</span><span className="kbd">↓</span><span className="tiny muted">navigate</span><span className="grow"/><span className="tiny muted">{filtered.length} results</span><span className="badge">AETHER</span></div>
+      </div>
+    </div>;
+  }
+
+  /* ---------- Boot & lock ---------- */
+  function BootScreen({onDone}){
+    const logs=['Initializing Aether kernel…','Mounting local storage…','Starting compositor…','Loading applications…','Calibrating glass surfaces…','Welcome back, operator.'];
+    const [i,setI]=useState(0);
+    useEffect(()=>{
+      const t=setInterval(()=>setI(v=>Math.min(v+1,logs.length-1)),320);
+      const d=setTimeout(onDone,2000);
+      return()=>{clearInterval(t);clearTimeout(d)};
+    },[]);
+    return <div className="boot" onClick={onDone}><div className="boot-inner">
+      <div className="boot-logo"><Icon name="bolt" size={34}/></div>
+      <div className="display" style={{fontSize:30,letterSpacing:'.2em',fontWeight:700}}>AETHER</div>
+      <div className="muted tiny" style={{letterSpacing:'.3em'}}>DESKTOP ENVIRONMENT</div>
+      <div className="boot-bar"><i/></div>
+      <div className="boot-log">{logs[i]}</div>
+      <div className="muted tiny" style={{marginTop:18,opacity:.5}}>click to skip</div>
+    </div></div>;
+  }
+  function LockScreen({onUnlock,clock}){
+    return <div className="lock" onClick={onUnlock}><div>
+      <div className="avatar">A</div>
+      <div className="display" style={{fontSize:44,fontWeight:700}}>{clock.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
+      <div className="muted" style={{fontSize:13,marginTop:4}}>{clock.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div>
+      <div className="pill" style={{marginTop:24}}><Icon name="lock" size={13}/>Click anywhere to unlock</div>
+    </div></div>;
+  }
+
+  /* ---------- Root ---------- */
+  function App(){
+    return <OSProvider><OSInner/></OSProvider>;
+  }
+  function OSInner(){
+    const {state,openApp,createFile,closeWindow,focusWindow,notify}=useOS();
+    const [palette,setPalette]=useState(false);
+    const [locked,setLocked]=useState(false);
+    const [booting,setBooting]=useState(true);
+    const [clock,setClock]=useState(new Date());
+    useEffect(()=>{window.__aetherBoot=Date.now()},[]);
+    useEffect(()=>{const t=setInterval(()=>setClock(new Date()),1000);return()=>clearInterval(t)},[]);
+    useEffect(()=>{
+      function key(e){
+        const mod=e.ctrlKey||e.metaKey;
+        if(mod&&e.key.toLowerCase()==='k'){e.preventDefault();setPalette(v=>!v)}
+        else if(mod&&e.key.toLowerCase()==='n'){
+          e.preventDefault();
+          const id=uid('f');
+          createFile({id,name:'untitled-'+new Date().toISOString().slice(11,19).replace(/:/g,'')+'.txt',type:'text',content:''});
+          openApp('editor',{fileId:id});
+        }
+        else if(mod&&e.key.toLowerCase()==='w'){
+          e.preventDefault();
+          const w=state.windows.filter(x=>!x.minimized).reduce((a,x)=>!a||x.z>a.z?x:a,null);
+          if(w)closeWindow(w.id);
+        }
+        else if(e.altKey&&e.key==='Tab'){
+          e.preventDefault();
+          const wins=[...state.windows].sort((a,b)=>a.z-b.z);
+          if(wins.length)focusWindow(wins[0].id);
+        }
+        else if(e.key==='Escape'){
+          if(palette)setPalette(false);
+          else{
+            const w=state.windows.filter(x=>!x.minimized).reduce((a,x)=>!a||x.z>a.z?x:a,null);
+            if(w)closeWindow(w.id);
           }
         }
-        window.addEventListener('keydown', onKey); return ()=> window.removeEventListener('keydown', onKey);
-      },[state.windows]);
+      }
+      window.addEventListener('keydown',key);
+      return()=>window.removeEventListener('keydown',key);
+    },[state.windows,palette]);
+    return <>
+      <Desktop onOpenPalette={()=>setPalette(true)} onLock={()=>setLocked(true)}/>
+      {palette&&<CommandPalette onClose={()=>setPalette(false)}/>}
+      {locked&&<LockScreen clock={clock} onUnlock={()=>{setLocked(false);notify('Session unlocked','Welcome back','shield')}}/>}
+      {booting&&<BootScreen onDone={()=>setBooting(false)}/>}
+    </>;
+  }
 
-      return (<><Desktop /></>);
-    }
+  ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />)
-    </script>
-  </body>
+  </script>
+</body>
 </html>
+
