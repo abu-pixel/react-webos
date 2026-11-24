@@ -1,10 +1,10 @@
-# AETHER OS
+# React WebOS
 
 > A complete desktop environment that lives inside a single HTML file.
 
-AETHER OS is a ground-up redesign of this project: a glassy, animated, local-first browser operating system built with React 18. It keeps the zero-build-step architecture of the original, so the exact same file runs from your file system and from Vercel.
+React WebOS is a ground-up redesign of this project: a glassy, animated, local-first browser operating system built with React 18. It keeps the zero-build-step architecture of the original, so the exact same file runs from your file system and from Vercel.
 
-![AETHER OS](https://img.shields.io/badge/AETHER%20OS-4.0.0-8b5cf6?style=for-the-badge)
+![React WebOS](https://img.shields.io/badge/React%20WebOS-4.0.0-8b5cf6?style=for-the-badge)
 ![React](https://img.shields.io/badge/React-18-22d3ee?style=for-the-badge)
 ![Build](https://img.shields.io/badge/build-none-a3e635?style=for-the-badge)
 ![Storage](https://img.shields.io/badge/storage-localStorage-fb7185?style=for-the-badge)
@@ -25,7 +25,7 @@ The previous "Super Extreme" desktop was replaced with an entirely new system:
 | App | What it does |
 | --- | --- |
 | **Explorer** | File manager with sidebar locations, breadcrumbs, grid/list views, sorting, search, inline creation, rename, star, trash, restore, and downloads. |
-| **Terminal** | `aether-sh` with history (up/down arrows), tab completion, and commands including `help`, `ls`, `cat`, `touch`, `mkdir`, `rm`, `mv`, `star`, `find`, `open`, `theme`, `wall`, `echo`, `date`, `whoami`, `clear`, `history`, `neofetch`, and `export`. |
+| **Terminal** | `webos-sh` with history (up/down arrows), tab completion, and commands including `help`, `ls`, `cat`, `touch`, `mkdir`, `rm`, `mv`, `star`, `find`, `open`, `theme`, `wall`, `echo`, `date`, `whoami`, `clear`, `history`, `neofetch`, and `export`. |
 | **Code Editor** | Line numbers, tab insertion, word wrap, adjustable font size, caret position, line/character count, dirty state, save, and download. |
 | **Paint Studio** | Brush, eraser, line, rectangle, ellipse, color palette, custom color, brush size, undo/redo, clear, and save to Files as PNG. |
 | **Gallery** | Image library with previews, lightbox navigation, and downloads. |
@@ -56,9 +56,9 @@ Three themes: **Dark**, **Light**, and **Eclipse**. Six accent colors and five p
 
 ## Storage and persistence
 
-All files, notes, settings, window geometry, favorites, and desktop icon positions are saved in `localStorage` under `aether-os-v4`. Nothing is uploaded anywhere. Settings includes JSON backup export/import so a workspace can be moved between browsers.
+All files, notes, settings, window geometry, favorites, and desktop icon positions are saved in `localStorage` under `react-webos-v4`. Nothing is uploaded anywhere. Settings includes JSON backup export/import so a workspace can be moved between browsers.
 
-If a workspace from the older **React WebOS - Super Extreme** build is found in `localStorage`, AETHER OS upgrades it on first boot and shows a welcome notification.
+If a workspace from the older **React WebOS - Super Extreme** build is found in `localStorage`, React WebOS upgrades it on first boot and shows a welcome notification.
 
 ## Installation / usage
 
@@ -74,7 +74,7 @@ Optional: serve the folder with VS Code Live Server or any static HTTP server.
 
 This repository is a static site: `index.html` sits at the root and there is no build step. A push to `main` triggers the existing Vercel deployment, and the deployed link serves the same file you see locally. No `package.json`, framework preset, or environment variables are needed.
 
-To verify a deployment, open the Vercel URL and check that the boot screen says **AETHER OS** and the top bar shows the AETHER mark.
+To verify a deployment, open the Vercel URL and check that the boot screen says **React WebOS** and the top bar shows the React WebOS mark.
 
 ## Technical details
 

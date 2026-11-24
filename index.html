@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#070812" />
-  <meta name="description" content="AETHER OS — an elite browser-based desktop environment built with React." />
-  <title>AETHER OS — Desktop</title>
+  <meta name="description" content="React WebOS — an elite browser-based desktop environment built with React." />
+  <title>React WebOS — Desktop</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap');
 
@@ -363,7 +363,7 @@
   <script crossorigin src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
   <script type="text/babel" data-presets="react">
   const {useState,useEffect,useRef,useCallback,useMemo,createContext,useContext} = React;
-  const KEY='aether-os-v4';
+  const KEY='react-webos-v4';
   const LEGACY_KEY='react-webos-super-v1';
   const VERSION='4.0.0';
   const TOP=40;
@@ -472,7 +472,7 @@
       version:4,
       settings:{theme:'dark',accent:'violet',wallpaper:'nebula',customWallpaper:null,animations:true,showIcons:true,blur:true,brightness:100,iconPositions:{}},
       files:[
-        f('f-welcome','welcome.md','text','# Welcome to AETHER OS\n\nYou are inside a full desktop environment running in a single HTML file.\n\n## Shortcuts\n- Ctrl / Cmd + K  — command palette\n- Ctrl / Cmd + N  — new note\n- Ctrl / Cmd + S  — save in editor\n- Alt + Tab       — cycle windows\n- Esc             — close overlays / top window\n\nRight-click the desktop for quick actions. Drag files here to import them.\n',{starred:true}),
+        f('f-welcome','welcome.md','text','# Welcome to React WebOS\n\nYou are inside a full desktop environment running in a single HTML file.\n\n## Shortcuts\n- Ctrl / Cmd + K  — command palette\n- Ctrl / Cmd + N  — new note\n- Ctrl / Cmd + S  — save in editor\n- Alt + Tab       — cycle windows\n- Esc             — close overlays / top window\n\nRight-click the desktop for quick actions. Drag files here to import them.\n',{starred:true}),
         f('f-folder','Field Notes','folder','',{starred:true}),
         f('f-ideas','ideas.txt','text','01. Build something nobody expects.\n02. Make every pixel intentional.\n03. Ship it.\n',{folder:'f-folder'}),
         f('f-art1','nebula-study.svg','image',artUrl('#6d28d9','#0891b2','NEBULA / 01'),{starred:true}),
@@ -504,13 +504,13 @@
       if(old){
         JSON.parse(old);
         const d=defaultState();
-        d.notifications=[{id:uid('n'),title:'Welcome to AETHER OS',body:'Your workspace has been upgraded.',icon:'sparkles',ts:Date.now()}];
+        d.notifications=[{id:uid('n'),title:'Welcome to React WebOS',body:'Your workspace has been upgraded.',icon:'sparkles',ts:Date.now()}];
         return d;
       }
     }catch(e){}
     return defaultState();
   }
-  function saveState(s){try{localStorage.setItem(KEY,JSON.stringify({...s,notifications:[]}))}catch(e){console.warn('AETHER: storage full',e)}}
+  function saveState(s){try{localStorage.setItem(KEY,JSON.stringify({...s,notifications:[]}))}catch(e){console.warn('WebOS: storage full',e)}}
   function readFileAsDataURL(file){return new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(file)})}
   function readFileAsText(file){return new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsText(file)})}
   function typeFromFile(file){
@@ -815,7 +815,7 @@
   /* ---------- Terminal ---------- */
   function TerminalApp(){
     const {state,createFile,updateFile,deleteFile,setSetting,openApp}=useOS();
-    const [lines,setLines]=useState([{t:'AETHER Shell 4.0 — type "help" to begin.',c:'term-dim'}]);
+    const [lines,setLines]=useState([{t:'WebOS Shell 4.0 — type "help" to begin.',c:'term-dim'}]);
     const [cmd,setCmd]=useState('');
     const [history,setHistory]=useState([]);
     const [hIdx,setHIdx]=useState(-1);
@@ -824,7 +824,7 @@
     const out=(t,c='')=>setLines(l=>[...l,{t:String(t),c}]);
     function run(raw){
       const input=raw.trim();if(!input)return;
-      out('visitor@aether:~$ '+input,'term-prompt');
+      out('visitor@webos:~$ '+input,'term-prompt');
       setHistory(h=>[input,...h]);setHIdx(-1);setCmd('');
       const parts=input.split(/\s+/);const c=parts[0].toLowerCase();const arg=parts.slice(1).join(' ');
       if(c==='help'){
@@ -884,18 +884,18 @@
         if(f){createFile({name:'export-'+Date.now()+'.txt',type:'text',content:JSON.stringify(f,null,2)});out('exported snapshot','term-ok')}else out('not found','term-err');
       }
       else if(c==='neofetch'){
-        out('      ▄▀▄   AETHER OS '+VERSION,'term-ok');out('     ▄█▀█▄  ─────────────');out('    ▄█▀ ▀█▄ Host: Browser Runtime');
-        out('    ▀█▄ ▄█▀ Shell: aether-sh 4.0');out('     ▀█▄█▀  DE: Aether Compositor');
+        out('      ▄▀▄   React WebOS '+VERSION,'term-ok');out('     ▄█▀█▄  ─────────────');out('    ▄█▀ ▀█▄ Host: Browser Runtime');
+        out('    ▀█▄ ▄█▀ Shell: webos-sh 4.0');out('     ▀█▄█▀  DE: WebOS Compositor');
         out('      ▀▀   Files: '+state.files.length+'  Windows: '+state.windows.length);
       }
       else out('command not found: '+c+'. Try "help".','term-err');
     }
     return <div className="terminal">
-      <div className="term-head"><span className="status-dot"/><span>aether-sh</span><span className="grow"/><span>{history.length} commands</span><button className="btn ghost icon" onClick={()=>setLines([])} title="Clear"><Icon name="trash" size={13}/></button></div>
+      <div className="term-head"><span className="status-dot"/><span>webos-sh</span><span className="grow"/><span>{history.length} commands</span><button className="btn ghost icon" onClick={()=>setLines([])} title="Clear"><Icon name="trash" size={13}/></button></div>
       <div className="term-body mono" ref={bodyRef} onClick={()=>document.getElementById('term-input')?.focus()}>
         {lines.map((l,i)=><div key={i} className={'term-line '+l.c}>{l.t||'\u00a0'}</div>)}
       </div>
-      <div className="term-input-row"><span className="term-path mono">visitor@aether:~$</span><input id="term-input" autoComplete="off" spellCheck="false" value={cmd} onChange={e=>setCmd(e.target.value)} onKeyDown={e=>{
+      <div className="term-input-row"><span className="term-path mono">visitor@webos:~$</span><input id="term-input" autoComplete="off" spellCheck="false" value={cmd} onChange={e=>setCmd(e.target.value)} onKeyDown={e=>{
         if(e.key==='Enter')run(cmd);
         else if(e.key==='ArrowUp'){e.preventDefault();const i=Math.min(hIdx+1,history.length-1);if(i>=0){setHIdx(i);setCmd(history[i])}}
         else if(e.key==='ArrowDown'){e.preventDefault();const i=hIdx-1;setHIdx(i);setCmd(i>=0?history[i]:'')}
@@ -1092,7 +1092,7 @@
     const last=a=>a[a.length-1];
     const active=state.windows.filter(w=>!w.minimized);
     const procs=[...active.map(w=>({name:appById(w.app).name,icon:appById(w.app).icon,cpu:rand(4,26)})),
-      {name:'aether-compositor',icon:'grid',cpu:rand(6,14)},{name:'storage-daemon',icon:'files',cpu:rand(2,7)},{name:'kernel',icon:'cpu',cpu:rand(1,5)}];
+      {name:'webos-compositor',icon:'grid',cpu:rand(6,14)},{name:'storage-daemon',icon:'files',cpu:rand(2,7)},{name:'kernel',icon:'cpu',cpu:rand(1,5)}];
     return <div className="monitor">
       <div className="stat-grid">
         <div className="stat-card"><div className="widget-title">Processor</div><div className="v">{last(cpu).toFixed(0)}%</div><Sparkline data={cpu}/><div className="metric"><span>8 virtual cores</span><b>{last(cpu).toFixed(1)}%</b></div></div>
@@ -1105,7 +1105,7 @@
       </div>
       <div className="panel" style={{padding:14}}>
         <div className="widget-title">Session</div>
-        <div className="row" style={{justifyContent:'space-between'}}><span className="tiny muted">Uptime</span><span className="mono tiny">{Math.max(0,Math.floor((tick-(window.__aetherBoot||tick))/1000))}s</span></div>
+        <div className="row" style={{justifyContent:'space-between'}}><span className="tiny muted">Uptime</span><span className="mono tiny">{Math.max(0,Math.floor((tick-(window.__webosBoot||tick))/1000))}s</span></div>
         <div className="row" style={{justifyContent:'space-between'}}><span className="tiny muted">Storage objects</span><span className="mono tiny">{state.files.length}</span></div>
         <div className="row" style={{justifyContent:'space-between'}}><span className="tiny muted">Render engine</span><span className="mono tiny">React 18 / Babel</span></div>
       </div>
@@ -1152,8 +1152,8 @@
     const walls=[['nebula','linear-gradient(135deg,#4c1d95,#0e7490,#db2777)'],['aurora','linear-gradient(135deg,#065f46,#1d4ed8,#7c3aed)'],['sunset','linear-gradient(135deg,#f97316,#be123c,#6d28d9)'],['ocean','linear-gradient(135deg,#0e7490,#1e3a8a,#0f766e)'],['mono','linear-gradient(135deg,#334155,#1e293b,#475569)']];
     function exportConfig(){
       const blob=new Blob([JSON.stringify({...state,notifications:[]},null,2)],{type:'application/json'});
-      const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='aether-os-backup.json';a.click();URL.revokeObjectURL(url);
-      notify('Backup exported','aether-os-backup.json','download');
+      const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='react-webos-backup.json';a.click();URL.revokeObjectURL(url);
+      notify('Backup exported','react-webos-backup.json','download');
     }
     async function importConfig(e){
       const file=e.target.files[0];if(!file)return;
@@ -1194,12 +1194,12 @@
     const {state}=useOS();
     return <div className="about">
       <div className="about-hero"><Icon name="sparkles" size={38}/></div>
-      <div><h1>AETHER OS</h1><div className="badge">Build {VERSION}</div></div>
+      <div><h1>React WebOS</h1><div className="badge">Build {VERSION}</div></div>
       <p className="muted tiny" style={{maxWidth:340,lineHeight:1.7}}>A desktop environment that lives in one HTML file. No build step, no server, no compromises — just React, CSS, and your browser.</p>
       <div className="panel" style={{padding:14,width:'100%'}}>
         <div className="spec"><span>Release</span><span className="mono">{VERSION} / stable</span></div>
         <div className="spec"><span>Kernel</span><span className="mono">Browser Runtime</span></div>
-        <div className="spec"><span>Compositor</span><span className="mono">Aether WM</span></div>
+        <div className="spec"><span>Compositor</span><span className="mono">WebOS WM</span></div>
         <div className="spec"><span>Files</span><span className="mono">{state.files.length} objects</span></div>
         <div className="spec"><span>Display</span><span className="mono">{window.innerWidth} × {window.innerHeight}</span></div>
         <div className="spec"><span>Security</span><span className="mono">Local-first</span></div>
@@ -1285,7 +1285,7 @@
       </div>
 
       <header className="topbar">
-        <div className="brand"><span className="brand-mark"><Icon name="bolt" size={13}/></span>AETHER<span className="muted" style={{letterSpacing:0}}>OS</span></div>
+        <div className="brand"><span className="brand-mark"><Icon name="bolt" size={13}/></span>REACT<span className="muted" style={{letterSpacing:0}}>WEBOS</span></div>
         <button className="topbar-btn" onClick={()=>setPanel(panel==='menu'?null:'menu')}><Icon name="menu" size={14}/>Activities</button>
         <button className="topbar-btn hide-sm" onClick={()=>openApp('explorer')}><Icon name="files" size={14}/>Files</button>
         <div className="topbar-center"><span className="status-dot"/><span className="display">{date}</span><span style={{color:'var(--muted)'}}>{fullTime}</span></div>
@@ -1423,14 +1423,14 @@
           </div>)}
           {!filtered.length&&<div className="empty"><div><Icon name="search" size={24}/><div className="tiny">No results for “{q}”</div></div></div>}
         </div>
-        <div className="row" style={{padding:'9px 16px',borderTop:'1px solid var(--stroke)'}}><span className="kbd">↑</span><span className="kbd">↓</span><span className="tiny muted">navigate</span><span className="grow"/><span className="tiny muted">{filtered.length} results</span><span className="badge">AETHER</span></div>
+        <div className="row" style={{padding:'9px 16px',borderTop:'1px solid var(--stroke)'}}><span className="kbd">↑</span><span className="kbd">↓</span><span className="tiny muted">navigate</span><span className="grow"/><span className="tiny muted">{filtered.length} results</span><span className="badge">WEBOS</span></div>
       </div>
     </div>;
   }
 
   /* ---------- Boot & lock ---------- */
   function BootScreen({onDone}){
-    const logs=['Initializing Aether kernel…','Mounting local storage…','Starting compositor…','Loading applications…','Calibrating glass surfaces…','Welcome back, operator.'];
+    const logs=['Initializing WebOS kernel…','Mounting local storage…','Starting compositor…','Loading applications…','Calibrating glass surfaces…','Welcome back, operator.'];
     const [i,setI]=useState(0);
     useEffect(()=>{
       const t=setInterval(()=>setI(v=>Math.min(v+1,logs.length-1)),320);
@@ -1439,7 +1439,7 @@
     },[]);
     return <div className="boot" onClick={onDone}><div className="boot-inner">
       <div className="boot-logo"><Icon name="bolt" size={34}/></div>
-      <div className="display" style={{fontSize:30,letterSpacing:'.2em',fontWeight:700}}>AETHER</div>
+      <div className="display" style={{fontSize:30,letterSpacing:'.2em',fontWeight:700}}>REACT WEBOS</div>
       <div className="muted tiny" style={{letterSpacing:'.3em'}}>DESKTOP ENVIRONMENT</div>
       <div className="boot-bar"><i/></div>
       <div className="boot-log">{logs[i]}</div>
@@ -1465,7 +1465,7 @@
     const [locked,setLocked]=useState(false);
     const [booting,setBooting]=useState(true);
     const [clock,setClock]=useState(new Date());
-    useEffect(()=>{window.__aetherBoot=Date.now()},[]);
+    useEffect(()=>{window.__webosBoot=Date.now()},[]);
     useEffect(()=>{const t=setInterval(()=>setClock(new Date()),1000);return()=>clearInterval(t)},[]);
     useEffect(()=>{
       function key(e){
