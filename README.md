@@ -9,6 +9,28 @@ React WebOS is a ground-up redesign of this project: a glassy, animated, local-f
 ![Build](https://img.shields.io/badge/build-none-a3e635?style=for-the-badge)
 ![Storage](https://img.shields.io/badge/storage-localStorage-fb7185?style=for-the-badge)
 
+## Screenshots
+
+<p align="center">
+  <img src="rw/Screenshot%20%2826%29.png" alt="React WebOS screenshot 1" width="45%">
+  <img src="rw/Screenshot%20%2827%29.png" alt="React WebOS screenshot 2" width="45%">
+</p>
+
+<p align="center">
+  <img src="rw/Screenshot%20%2828%29.png" alt="React WebOS screenshot 3" width="45%">
+  <img src="rw/Screenshot%20%2829%29.png" alt="React WebOS screenshot 4" width="45%">
+</p>
+
+<p align="center">
+  <img src="rw/Screenshot%20%2830%29.png" alt="React WebOS screenshot 5" width="45%">
+  <img src="rw/Screenshot%20%2831%29.png" alt="React WebOS screenshot 6" width="45%">
+</p>
+
+<p align="center">
+  <img src="rw/Screenshot%20%2832%29.png" alt="React WebOS screenshot 7" width="45%">
+  <img src="rw/Screenshot%20%2833%29.png" alt="React WebOS screenshot 8" width="45%">
+</p>
+
 ## What changed
 
 The previous "Super Extreme" desktop was replaced with an entirely new system:
